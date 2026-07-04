@@ -442,6 +442,19 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
           </div>
         )}
 
+        {(etapa === 'foto' || etapa === 'confirma') && fotos.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap justify-center pt-2">
+            {fotos.map((f, i) => (
+              <div key={i} className="relative">
+                <img src={URL.createObjectURL(f)} alt={`foto ${i + 1}`}
+                  className="w-16 h-16 object-cover rounded-lg border-2 border-white shadow-sm" />
+                <button onClick={() => setFotos(fotos.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-[11px] font-bold leading-none shadow">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {etapa === 'foto' && (
           <div className="flex flex-wrap gap-2 justify-center pt-2">
             <button onClick={() => fotoRef.current?.click()} className="flex items-center gap-2 bg-white border border-fpv-100 text-fpv-700 font-bold text-sm px-5 py-3 rounded-full shadow-sm">
