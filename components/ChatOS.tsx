@@ -57,6 +57,12 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const fimRef = useRef<HTMLDivElement>(null);
   const fotoRef = useRef<HTMLInputElement>(null);
   const galeriaRef = useRef<HTMLInputElement>(null);
+  // ===== áudio REAL estilo WhatsApp (MediaRecorder + Edge Function) =====
+  const mediaRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const audioModoRef = useRef(true);   // tenta áudio real; cai p/ voz do navegador se falhar
+  const [segundos, setSegundos] = useState(0);
+  const [transcrevendo, setTranscrevendo] = useState(false);
   const mudoRef = useRef(mudo);
   mudoRef.current = mudo;
 
@@ -122,7 +128,36 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs, transcrevendo]);
+
+  // cronômetro do gravador
+  useEffect(() => {
+    if (!ouvindo) { setSegundos(0); return; }
+    const t = setInterval(() => setSegundos(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [ouvindo]);
+
+  const transcreverAudio = async (blob: Blob, duracao: number) => {
+    eu(`🎙️ áudio de ${duracao}s`);
+    setTranscrevendo(true);
+    try {
+      const fd = new FormData();
+      fd.append('audio', blob, 'audio.webm');
+      const { data, error } = await supabase.functions.invoke('transcrever', { body: fd });
+      setTranscrevendo(false);
+      const texto = (data as any)?.texto?.trim();
+      if (error || !texto) {
+        audioModoRef.current = false;
+        bot('⚠️ Transcrição indisponível (função "transcrever" ainda não configurada no Supabase). Sem problema: voltei pro modo do navegador — segura e fala de novo.');
+        return;
+      }
+      enviarResposta(texto);
+    } catch {
+      setTranscrevendo(false);
+      audioModoRef.current = false;
+      bot('⚠️ Erro na transcrição — voltei pro modo do navegador. Segura e fala de novo.');
+    }
+  };
 
   // ===== botões Refazer / Avançar (pedido do campo) =====
   const limparCampoAtual = (et: Etapa) => {
@@ -154,30 +189,64 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   };
 
   // ===== push-to-talk estilo WhatsApp =====
-  const segurarMic = (e: React.PointerEvent) => {
+  const segurarMic = async (e: React.PointerEvent) => {
     e.preventDefault();
-    if (!recRef.current) { bot('Áudio não suportado neste navegador — usa o Chrome. Pode digitar também!'); return; }
+    try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ok */ }
     cancelRef.current = false;
+    speechSynthesis.cancel();
+
+    // MODO 1 — áudio REAL (grava e transcreve no servidor, fluido como WhatsApp)
+    if (audioModoRef.current && navigator.mediaDevices?.getUserMedia && (window as any).MediaRecorder) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        chunksRef.current = [];
+        const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+          : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+        const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        mr.ondataavailable = ev => { if (ev.data.size) chunksRef.current.push(ev.data); };
+        mr.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          setOuvindo(false);
+          const dur = segundos;
+          const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
+          chunksRef.current = [];
+          if (!cancelRef.current && blob.size > 2000) transcreverAudio(blob, dur);
+          cancelRef.current = false;
+        };
+        mediaRef.current = mr;
+        mr.start(250);
+        segurandoRef.current = true;
+        setOuvindo(true);
+        return;
+      } catch { audioModoRef.current = false; /* sem permissão/suporte → modo 2 */ }
+    }
+
+    // MODO 2 — reconhecimento do navegador (fallback)
+    if (!recRef.current) { bot('Áudio não suportado neste navegador — usa o Chrome. Pode digitar também!'); return; }
     bufferRef.current = '';
     segurandoRef.current = true;
-    speechSynthesis.cancel();
     try { recRef.current.start(); } catch { /* já ativo */ }
     setOuvindo(true);
-    try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ok */ }
   };
 
   const soltarMic = () => {
-    if (!recRef.current) return;
     segurandoRef.current = false;
-    try { recRef.current.stop(); } catch { /* ok */ }
-    // onend dispara → envia o que foi falado
+    if (mediaRef.current && mediaRef.current.state !== 'inactive') {
+      try { mediaRef.current.stop(); } catch { /* ok */ }
+      return; // onstop → transcreverAudio
+    }
+    if (recRef.current) { try { recRef.current.stop(); } catch { /* ok */ } }
   };
 
   const arrastouFora = () => {
-    if (!ouvindo || !recRef.current || cancelRef.current) return;
+    if (!ouvindo || cancelRef.current) return;
     cancelRef.current = true;
     segurandoRef.current = false;
-    try { recRef.current.stop(); } catch { /* ok */ }
+    if (mediaRef.current && mediaRef.current.state !== 'inactive') {
+      try { mediaRef.current.stop(); } catch { /* ok */ }
+    } else if (recRef.current) {
+      try { recRef.current.stop(); } catch { /* ok */ }
+    }
     eu('🚫 áudio cancelado');
   };
 
@@ -408,6 +477,13 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
             </div>
           </div>
         )}
+        {transcrevendo && (
+          <div className="flex justify-end">
+            <div className="bg-fpv-100 text-fpv-700 text-sm px-3.5 py-2.5 rounded-2xl rounded-br-sm animate-pulse shadow-sm">
+              ⏳ transcrevendo áudio…
+            </div>
+          </div>
+        )}
         <div ref={fimRef} />
       </div>
 
@@ -429,7 +505,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         )}
         {ouvindo && (
           <div className="text-center text-xs font-bold text-red-500 mb-2 animate-pulse">
-            🎙️ GRAVANDO… solta pra ENVIAR · arrasta o dedo pra fora pra CANCELAR
+            🎙️ GRAVANDO {Math.floor(segundos / 60)}:{String(segundos % 60).padStart(2, '0')} · solta pra ENVIAR · arrasta pra fora pra CANCELAR
           </div>
         )}
         <div className="flex items-center gap-2">
