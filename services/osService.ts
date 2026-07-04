@@ -1,0 +1,60 @@
+import { supabase } from './supabaseClient';
+import { OSCampo } from '../types';
+
+export const osService = {
+  async listar(): Promise<OSCampo[]> {
+    const { data, error } = await supabase
+      .from('os_campo')
+      .select('*')
+      .order('criado_em', { ascending: false });
+    if (error) { console.error('Erro ao listar O.S.:', error.message); return []; }
+    return data as OSCampo[];
+  },
+
+  async salvar(os: OSCampo): Promise<{ ok: boolean; erro?: string; os?: OSCampo }> {
+    const payload = { ...os };
+    delete (payload as any).id;
+    delete (payload as any).criado_em;
+
+    if (os.id) {
+      const { error } = await supabase.from('os_campo').update(payload).eq('id', os.id);
+      return { ok: !error, erro: error?.message };
+    }
+    // insert devolve a linha gravada — o trigger do banco atribui o F-nº
+    const { data, error } = await supabase.from('os_campo').insert([payload]).select().single();
+    return { ok: !error, erro: error?.message, os: data as OSCampo };
+  },
+
+  async excluir(id: number): Promise<boolean> {
+    const { error } = await supabase.from('os_campo').delete().eq('id', id);
+    return !error;
+  },
+
+  // Próximo número da contagem FICTÍCIA (segue a sequência criada pelo almoxarifado).
+  // Início em 77 = continua de onde a contagem manual parou.
+  async proximaFict(): Promise<number> {
+    const INICIO_FICT = 77;
+    const { data, error } = await supabase
+      .from('os_campo')
+      .select('numero_fict')
+      .not('numero_fict', 'is', null)
+      .order('numero_fict', { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) return INICIO_FICT;
+    return Math.max((data[0] as any).numero_fict + 1, INICIO_FICT);
+  },
+
+  async uploadFoto(file: File): Promise<string | null> {
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `os/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await supabase.storage.from('fotos-os').upload(path, file);
+      if (error) throw error;
+      const { data } = supabase.storage.from('fotos-os').getPublicUrl(path);
+      return data.publicUrl;
+    } catch (e: any) {
+      console.error('Erro no upload da foto:', e.message);
+      return null;
+    }
+  }
+};
