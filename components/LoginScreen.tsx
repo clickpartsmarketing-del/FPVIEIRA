@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Lock, ArrowRight, Loader2, HardHat } from 'lucide-react';
-import { supabase } from '../services/supabaseClient';
+import { supabase, configOk } from '../services/supabaseClient';
 
 const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -15,7 +15,9 @@ const LoginScreen: React.FC = () => {
     // Autenticação REAL via Supabase Auth — nada de senha no código.
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
     if (error) {
-      setErro('E-mail ou senha incorretos.');
+      setErro(error.message === 'Invalid login credentials'
+        ? 'E-mail ou senha incorretos.'
+        : 'Erro de conexão: ' + error.message);
       setCarregando(false);
     }
     // Sucesso: o App detecta a sessão via onAuthStateChange.
@@ -31,6 +33,13 @@ const LoginScreen: React.FC = () => {
             <p className="text-xs text-stone-500">F.P. Vieira Engenharia · FP.094</p>
           </div>
         </div>
+
+        {!configOk && (
+          <div className="mb-4 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 font-medium">
+            ⚠️ Este deploy está SEM as variáveis <b>VITE_SUPABASE_URL</b> / <b>VITE_SUPABASE_ANON_KEY</b>.
+            Configure na Vercel (Settings → Environment Variables) e faça <b>Redeploy</b>.
+          </div>
+        )}
 
         <form onSubmit={entrar} className="space-y-4">
           <div className="relative">
