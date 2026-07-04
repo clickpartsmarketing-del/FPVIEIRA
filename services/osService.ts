@@ -22,6 +22,19 @@ export const osService = {
     }
     // insert devolve a linha gravada — o trigger do banco atribui o F-nº
     const { data, error } = await supabase.from('os_campo').insert([payload]).select().single();
+
+    // resiliência: se o banco ainda não tem a coluna 'solicitado',
+    // funde o pedido do fiscal dentro do serviço e salva mesmo assim
+    if (error && /solicitado/i.test(error.message)) {
+      const p2: any = { ...payload };
+      if (p2.solicitado) {
+        p2.servico = `[FISCAL PEDIU] ${p2.solicitado} | [EXECUTADO] ${p2.servico || ''}`.trim();
+      }
+      delete p2.solicitado;
+      const r2 = await supabase.from('os_campo').insert([p2]).select().single();
+      return { ok: !r2.error, erro: r2.error?.message, os: r2.data as OSCampo };
+    }
+
     return { ok: !error, erro: error?.message, os: data as OSCampo };
   },
 

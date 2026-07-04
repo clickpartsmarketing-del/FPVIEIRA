@@ -51,8 +51,11 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const etapaRef = useRef<Etapa>('escola');
   const tentativaRef = useRef(0);
   const recRef = useRef<any>(null);
+  const bufferRef = useRef('');      // acumula a fala enquanto o dedo segura
+  const cancelRef = useRef(false);   // arrastou pra fora = cancela o áudio
   const fimRef = useRef<HTMLDivElement>(null);
   const fotoRef = useRef<HTMLInputElement>(null);
+  const galeriaRef = useRef<HTMLInputElement>(null);
   const mudoRef = useRef(mudo);
   mudoRef.current = mudo;
 
@@ -84,14 +87,20 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     if (SR) {
       const r = new SR();
       r.lang = 'pt-BR';
-      r.continuous = false;
+      r.continuous = true;       // grava ENQUANTO o dedo segura (estilo WhatsApp)
       r.interimResults = false;
       r.onresult = (ev: any) => {
-        let t = '';
-        for (let i = ev.resultIndex; i < ev.results.length; i++) t += ev.results[i][0].transcript;
-        if (t.trim()) enviarResposta(t.trim());   // usa etapaRef → sempre a pergunta ATUAL
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          if (ev.results[i].isFinal) bufferRef.current += ev.results[i][0].transcript + ' ';
+        }
       };
-      r.onend = () => setOuvindo(false);
+      r.onend = () => {
+        setOuvindo(false);
+        const t = bufferRef.current.trim();
+        bufferRef.current = '';
+        if (t && !cancelRef.current) enviarResposta(t);  // solta o dedo → envia
+        cancelRef.current = false;
+      };
       recRef.current = r;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,10 +108,38 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
 
-  const mic = () => {
+  // ===== push-to-talk estilo WhatsApp =====
+  const segurarMic = (e: React.PointerEvent) => {
+    e.preventDefault();
     if (!recRef.current) { bot('Áudio não suportado neste navegador — usa o Chrome. Pode digitar também!'); return; }
-    if (ouvindo) { recRef.current.stop(); setOuvindo(false); }
-    else { speechSynthesis.cancel(); recRef.current.start(); setOuvindo(true); }
+    cancelRef.current = false;
+    bufferRef.current = '';
+    speechSynthesis.cancel();
+    try { recRef.current.start(); } catch { /* já ativo */ }
+    setOuvindo(true);
+    try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ok */ }
+  };
+
+  const soltarMic = () => {
+    if (!recRef.current) return;
+    try { recRef.current.stop(); } catch { /* ok */ }
+    // onend dispara → envia o que foi falado
+  };
+
+  const arrastouFora = () => {
+    if (!ouvindo || !recRef.current || cancelRef.current) return;
+    cancelRef.current = true;
+    try { recRef.current.stop(); } catch { /* ok */ }
+    eu('🚫 áudio cancelado');
+  };
+
+  // dedo capturado: detecta "arrastar pra fora" medindo a distância do botão
+  const moveuMic = (e: React.PointerEvent) => {
+    if (!ouvindo) return;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const m = 36; // margem de tolerância (px)
+    const fora = e.clientX < r.left - m || e.clientX > r.right + m || e.clientY < r.top - m || e.clientY > r.bottom + m;
+    if (fora) arrastouFora();
   };
 
   const enviarResposta = (texto: string) => {
@@ -188,17 +225,19 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     mudarEtapa('foto');
   };
 
+  const MAX_FOTOS = 7;
+
   const anexouFoto = (files: FileList | null) => {
-    if (files && files.length) {
-      setFotos(prev => [...prev, ...Array.from(files)]);
-      eu(`📷 ${files.length} foto(s) anexada(s)`);
-      bot('📋 Confere o resumo aí embaixo. Tá certo? CONFIRMAR salva no sistema central.');
-      mudarEtapa('confirma');
-    }
+    if (!files || !files.length) return;
+    const total = Math.min(fotos.length + files.length, MAX_FOTOS);
+    const passou = fotos.length + files.length > MAX_FOTOS;
+    setFotos(prev => [...prev, ...Array.from(files)].slice(0, MAX_FOTOS));
+    eu(`📷 ${total}/${MAX_FOTOS} foto(s)`);
+    if (passou) bot(`Máximo de ${MAX_FOTOS} fotos — mantive as ${MAX_FOTOS} primeiras. Pode CONTINUAR.`);
   };
 
-  const pularFoto = () => {
-    eu('Pular foto');
+  const continuarFotos = () => {
+    eu(fotos.length ? `Continuar com ${fotos.length} foto(s)` : 'Continuar sem foto');
     bot('📋 Confere o resumo aí embaixo. Tá certo? CONFIRMAR salva no sistema central.');
     mudarEtapa('confirma');
   };
@@ -287,11 +326,16 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         )}
 
         {etapa === 'foto' && (
-          <div className="flex gap-2 justify-center pt-2">
+          <div className="flex flex-wrap gap-2 justify-center pt-2">
             <button onClick={() => fotoRef.current?.click()} className="flex items-center gap-2 bg-white border border-fpv-100 text-fpv-700 font-bold text-sm px-5 py-3 rounded-full shadow-sm">
-              <Camera size={17} /> Tirar foto
+              <Camera size={17} /> Câmera
             </button>
-            <button onClick={pularFoto} className="bg-white border border-stone-200 text-stone-500 font-bold text-sm px-5 py-3 rounded-full shadow-sm">Pular</button>
+            <button onClick={() => galeriaRef.current?.click()} className="flex items-center gap-2 bg-white border border-fpv-100 text-fpv-700 font-bold text-sm px-5 py-3 rounded-full shadow-sm">
+              🖼️ Galeria (até {MAX_FOTOS})
+            </button>
+            <button onClick={continuarFotos} className="flex items-center gap-2 bg-fpv-500 text-white font-bold text-sm px-5 py-3 rounded-full shadow-sm">
+              <Check size={16} /> Continuar {fotos.length > 0 ? `(${fotos.length}/${MAX_FOTOS})` : 'sem foto'}
+            </button>
           </div>
         )}
 
@@ -319,28 +363,43 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         <div ref={fimRef} />
       </div>
 
-      <input ref={fotoRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
-        onChange={e => anexouFoto(e.target.files)} />
+      <input ref={fotoRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => { anexouFoto(e.target.files); e.target.value = ''; }} />
+      <input ref={galeriaRef} type="file" accept="image/*" multiple className="hidden"
+        onChange={e => { anexouFoto(e.target.files); e.target.value = ''; }} />
 
-      <div className="p-3 bg-white rounded-b-2xl border-t border-stone-200 flex items-center gap-2">
-        <input
-          value={entrada}
-          onChange={e => setEntrada(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && entrada.trim()) enviarResposta(entrada.trim()); }}
-          placeholder={ouvindo ? '🎙️ Ouvindo… fala à vontade' : 'Fala no microfone ou digita aqui…'}
-          className="flex-1 bg-stone-50 border border-stone-200 rounded-full px-4 py-3 text-sm outline-none focus:border-fpv-500"
-        />
-        {entrada.trim() ? (
-          <button onClick={() => enviarResposta(entrada.trim())}
-            className="w-12 h-12 rounded-full bg-fpv-500 text-white flex items-center justify-center shrink-0">
-            <Send size={19} />
-          </button>
-        ) : (
-          <button onClick={mic}
-            className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 transition-all ${ouvindo ? 'bg-red-500 text-white animate-pulse scale-110' : 'bg-fpv-500 text-white'}`}>
-            <Mic size={24} />
-          </button>
+      <div className="p-3 bg-white rounded-b-2xl border-t border-stone-200">
+        {ouvindo && (
+          <div className="text-center text-xs font-bold text-red-500 mb-2 animate-pulse">
+            🎙️ GRAVANDO… solta pra ENVIAR · arrasta o dedo pra fora pra CANCELAR
+          </div>
         )}
+        <div className="flex items-center gap-2">
+          <input
+            value={entrada}
+            onChange={e => setEntrada(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && entrada.trim()) enviarResposta(entrada.trim()); }}
+            placeholder={ouvindo ? '🎙️ Gravando…' : 'SEGURA o microfone pra falar, ou digita…'}
+            className="flex-1 bg-stone-50 border border-stone-200 rounded-full px-4 py-3 text-sm outline-none focus:border-fpv-500"
+          />
+          {entrada.trim() ? (
+            <button onClick={() => enviarResposta(entrada.trim())}
+              className="w-12 h-12 rounded-full bg-fpv-500 text-white flex items-center justify-center shrink-0">
+              <Send size={19} />
+            </button>
+          ) : (
+            <button
+              onPointerDown={segurarMic}
+              onPointerUp={soltarMic}
+              onPointerMove={moveuMic}
+              onPointerCancel={arrastouFora}
+              onContextMenu={e => e.preventDefault()}
+              style={{ touchAction: 'none' }}
+              className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 transition-all select-none ${ouvindo ? 'bg-red-500 text-white animate-pulse scale-125' : 'bg-fpv-500 text-white'}`}>
+              <Mic size={24} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
