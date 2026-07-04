@@ -9,8 +9,10 @@ import NovaOS from './components/NovaOS';
 import ListaOS from './components/ListaOS';
 import FechamentoSemanal from './components/FechamentoSemanal';
 import AlmoxOS from './components/AlmoxOS';
+import Gestao from './components/Gestao';
 
-type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'fechamento';
+type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento';
+const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
 
 const App: React.FC = () => {
   const [sessao, setSessao] = useState<any>(null);
@@ -77,6 +79,7 @@ const App: React.FC = () => {
           />
         )}
         {aba === 'almox' && <AlmoxOS listaOS={lista} />}
+        {aba === 'gestao' && <Gestao lista={lista} papel={usuario} />}
         {aba === 'fechamento' && <FechamentoSemanal lista={lista} />}
       </main>
 
@@ -86,6 +89,7 @@ const App: React.FC = () => {
           <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />
           <TabBtn id="lista" icon={ListChecks} label={`O.S. (${lista.length})`} />
           <TabBtn id="almox" icon={Package} label="Almox" />
+          {GESTORES.includes(usuario) && <TabBtn id="gestao" icon={RefreshCw} label="Gestão" />}
           <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />
         </div>
       </nav>
