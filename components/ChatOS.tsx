@@ -53,6 +53,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const recRef = useRef<any>(null);
   const bufferRef = useRef('');      // acumula a fala enquanto o dedo segura
   const cancelRef = useRef(false);   // arrastou pra fora = cancela o áudio
+  const segurandoRef = useRef(false); // dedo ainda no botão? religa o motor se ele parar sozinho
   const fimRef = useRef<HTMLDivElement>(null);
   const fotoRef = useRef<HTMLInputElement>(null);
   const galeriaRef = useRef<HTMLInputElement>(null);
@@ -60,6 +61,16 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   mudoRef.current = mudo;
 
   const mudarEtapa = (e: Etapa) => { etapaRef.current = e; tentativaRef.current = 0; setEtapa(e); };
+
+  const ORDEM: Etapa[] = ['escola', 'solicitado', 'executado', 'materiais', 'medidas'];
+  const PERGUNTA: Record<string, string> = {
+    escola: 'Em QUAL ESCOLA você está?',
+    solicitado: 'O QUE O FISCAL PEDIU? (a demanda que chegou pra você)',
+    executado: '🔨 O que VOCÊ FEZ de verdade aí? (o serviço executado)',
+    materiais: '🔩 Quais MATERIAIS gastou? Quantidade + item (ex.: 2 assentos, 1 sifão).',
+    medidas: '📐 As MEDIDAS pro cálculo: metros, área ou unidades — só números.',
+    conclusao: 'O serviço JÁ TERMINOU? Toca num dos botões aí embaixo. 👇'
+  };
 
   const falar = (t: string) => {
     if (mudoRef.current || !('speechSynthesis' in window)) return;
@@ -95,6 +106,11 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         }
       };
       r.onend = () => {
+        // Chrome desliga sozinho em pausas de fala — se o dedo AINDA está
+        // no botão, religa o motor e continua acumulando (estilo WhatsApp)
+        if (segurandoRef.current && !cancelRef.current) {
+          try { r.start(); return; } catch { /* segue para envio */ }
+        }
         setOuvindo(false);
         const t = bufferRef.current.trim();
         bufferRef.current = '';
@@ -108,12 +124,42 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
 
+  // ===== botões Refazer / Avançar (pedido do campo) =====
+  const limparCampoAtual = (et: Etapa) => {
+    if (et === 'escola') setDados(d => ({ ...d, unidade: '' }));
+    if (et === 'solicitado') setDados(d => ({ ...d, solicitado: '' }));
+    if (et === 'executado') setDados(d => ({ ...d, executado: '' }));
+    if (et === 'materiais') setDados(d => ({ ...d, materiais: '' }));
+    if (et === 'medidas') setDados(d => ({ ...d, memoria: '' }));
+  };
+
+  const refazer = () => {
+    const et = etapaRef.current;
+    if (!ORDEM.includes(et)) return;
+    eu('🔁 Refazer resposta');
+    limparCampoAtual(et);
+    tentativaRef.current = 0;
+    bot('Beleza, apaguei. ' + PERGUNTA[et]);
+  };
+
+  const avancar = () => {
+    const et = etapaRef.current;
+    if (!ORDEM.includes(et)) return;
+    if (et === 'escola' && !dados.unidade) { bot('A escola é obrigatória, chefe — fala o nome dela.'); return; }
+    eu('➡️ Avançar');
+    if (et === 'medidas') { bot(PERGUNTA.conclusao); mudarEtapa('conclusao'); return; }
+    const prox = ORDEM[ORDEM.indexOf(et) + 1];
+    bot(PERGUNTA[prox]);
+    mudarEtapa(prox);
+  };
+
   // ===== push-to-talk estilo WhatsApp =====
   const segurarMic = (e: React.PointerEvent) => {
     e.preventDefault();
     if (!recRef.current) { bot('Áudio não suportado neste navegador — usa o Chrome. Pode digitar também!'); return; }
     cancelRef.current = false;
     bufferRef.current = '';
+    segurandoRef.current = true;
     speechSynthesis.cancel();
     try { recRef.current.start(); } catch { /* já ativo */ }
     setOuvindo(true);
@@ -122,6 +168,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   const soltarMic = () => {
     if (!recRef.current) return;
+    segurandoRef.current = false;
     try { recRef.current.stop(); } catch { /* ok */ }
     // onend dispara → envia o que foi falado
   };
@@ -129,6 +176,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const arrastouFora = () => {
     if (!ouvindo || !recRef.current || cancelRef.current) return;
     cancelRef.current = true;
+    segurandoRef.current = false;
     try { recRef.current.stop(); } catch { /* ok */ }
     eu('🚫 áudio cancelado');
   };
@@ -369,6 +417,16 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         onChange={e => { anexouFoto(e.target.files); e.target.value = ''; }} />
 
       <div className="p-3 bg-white rounded-b-2xl border-t border-stone-200">
+        {ORDEM.includes(etapa) && !ouvindo && (
+          <div className="flex gap-2 justify-center mb-2">
+            <button onClick={refazer} className="text-xs font-bold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-4 py-1.5">
+              🔁 Refazer resposta
+            </button>
+            <button onClick={avancar} className="text-xs font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-4 py-1.5">
+              ➡️ Avançar
+            </button>
+          </div>
+        )}
         {ouvindo && (
           <div className="text-center text-xs font-bold text-red-500 mb-2 animate-pulse">
             🎙️ GRAVANDO… solta pra ENVIAR · arrasta o dedo pra fora pra CANCELAR
