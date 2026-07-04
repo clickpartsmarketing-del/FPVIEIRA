@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, RefreshCw, Package, LayoutDashboard } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { osService } from './services/osService';
-import { OSCampo } from './types';
+import { OSCampo, EXECUTOR_OPTIONS } from './types';
 import LoginScreen from './components/LoginScreen';
 import ChatOS from './components/ChatOS';
 import NovaOS from './components/NovaOS';
@@ -13,6 +13,10 @@ import Gestao from './components/Gestao';
 
 type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento';
 const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
+
+// casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
+// carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
+const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
 
 const App: React.FC = () => {
   const [sessao, setSessao] = useState<any>(null);
@@ -50,6 +54,9 @@ const App: React.FC = () => {
   if (!sessao) return <LoginScreen />;
 
   const usuario = sessao.user?.email?.split('@')[0] || 'usuário';
+  const meuNome = GESTORES.includes(usuario)
+    ? undefined
+    : EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
 
   const TabBtn = ({ id, icon: Icon, label }: { id: Aba; icon: any; label: string }) => (
     <button onClick={() => { setAba(id); if (id !== 'nova') setEditando(null); }}
@@ -88,6 +95,7 @@ const App: React.FC = () => {
             lista={lista}
             aoEditar={(os) => { setEditando(os); setAba('nova'); }}
             aoMudar={recarregar}
+            meuNome={meuNome}
           />
         )}
         {aba === 'almox' && <AlmoxOS listaOS={lista} />}
