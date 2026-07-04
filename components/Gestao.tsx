@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Camera, Check, CheckCircle2, ChevronDown, Clock, Copy, Download, Hash,
+  Camera, Check, ChevronDown, Clock, Copy, Download, Hash,
   PenLine, Pencil, Route, Ruler, ShieldCheck, Siren, TriangleAlert, Undo2,
   UserCheck, X, Zap
 } from 'lucide-react';
 import { OSCampo } from '../types';
 import { osService } from '../services/osService';
+import { AREAS, areaDaOS, Area } from '../data/areas';
 
 // =====================================================================
 // Aba GESTÃO — 3 telas sob medida:
@@ -490,6 +491,18 @@ const TelaEngenheiro: React.FC<Props> = ({ lista, aoEditar, aoMudar }) => {
   const [assinadasHoje, setAssinadasHoje] = useState<number>(() => lerKpiDia('a'));
   const [fechadasHoje, setFechadasHoje] = useState<number>(() => lerKpiDia('f'));
   const [toast, setToast] = useState<{ msg: string; undo?: () => void } | null>(null);
+  // segmentação por ÁREA (disciplina) + editor rápido de memória de cálculo
+  // (textarea NÃO-controlada via ref: CartaoOS é recriado a cada render do
+  //  pai, e um value controlado remontaria o campo a cada tecla)
+  const [filtroArea, setFiltroArea] = useState<string>('todas');
+  const [memEditId, setMemEditId] = useState<number | null>(null);
+  const memRef = useRef<HTMLTextAreaElement | null>(null);
+  const areaPorId = useMemo(() => {
+    const mapa = new Map<number, Area>();
+    lista.forEach(o => { if (o.id != null) mapa.set(o.id, areaDaOS(o)); });
+    return mapa;
+  }, [lista]);
+  const areaDe = (o: OSCampo): Area => (o.id != null && areaPorId.get(o.id)) || areaDaOS(o);
   useEffect(() => {
     sessionStorage.setItem('fpvKpiRota', JSON.stringify({ dia: diaHoje, a: assinadasHoje, f: fechadasHoje }));
   }, [assinadasHoje, fechadasHoje]);
@@ -563,7 +576,12 @@ const TelaEngenheiro: React.FC<Props> = ({ lista, aoEditar, aoMudar }) => {
 
   // rota REAL (sem filtro) — anel, header e celebração usam esta contagem
   const totalParadas = paradas.length;
-  // filtro por furo só muda a exibição da fila
+  // filtros só mudam a exibição da fila
+  if (filtroArea !== 'todas') {
+    paradas = paradas
+      .map(p => ({ ...p, oss: p.oss.filter(o => areaDe(o).nome === filtroArea) }))
+      .filter(p => p.oss.length > 0);
+  }
   if (filtro === 'semfoto') paradas = paradas.filter(p => p.oss.some(o => !selosDaOS(o).foto));
   if (filtro === 'semnum') paradas = paradas.filter(p => p.oss.some(o => !selosDaOS(o).numero));
 
@@ -589,9 +607,23 @@ const TelaEngenheiro: React.FC<Props> = ({ lista, aoEditar, aoMudar }) => {
     aoMudar();
   };
 
+  const salvarMemoria = async (o: OSCampo) => {
+    const texto = (memRef.current?.value ?? '').trim();
+    const r = await osService.salvar({ ...o, memoria_calculo: texto });
+    if (r.ok) {
+      setMemEditId(null);
+      setToast({ msg: `📐 Memória da O.S. ${rotuloOS(o)} salva` });
+      setTimeout(() => setToast(t => (t && t.msg.startsWith('📐') ? null : t)), 4000);
+      aoMudar();
+    } else {
+      setToast({ msg: `Erro ao salvar memória: ${r.erro || 'tente de novo'}` });
+    }
+  };
+
   const PiluIcones: Record<string, any> = { foto: Camera, memoria: Ruler, numero: Hash };
   const CartaoOS: React.FC<{ o: OSCampo }> = ({ o }) => {
     const s = selosDaOS(o);
+    const ar = areaDe(o);
     const parado = diasDesde(o.conclusao || o.entrada);
     const pilulas: { key: 'foto' | 'memoria' | 'numero'; okTxt: string; faltaTxt: string }[] = [
       { key: 'foto', okTxt: 'Foto ✓', faltaTxt: 'Sem foto' },
@@ -605,11 +637,49 @@ const TelaEngenheiro: React.FC<Props> = ({ lista, aoEditar, aoMudar }) => {
           <span className={`font-mono font-bold text-sm px-1.5 py-0.5 rounded ${s.numero ? 'bg-fpv-50 text-fpv-700' : 'bg-amber-50 text-amber-700'}`}>{rotuloOS(o)}</span>
           <span className="text-xs text-stone-600 truncate flex-1">{o.servico || o.solicitado || '—'}</span>
         </div>
-        <div className="text-[11px] text-stone-500 mb-2">
-          {o.executor || 'sem executor'}{parado != null && parado > 0 && (
-            <span className={parado > 14 ? 'text-red-600 font-bold' : ''}> · parado {ha(parado)}</span>
+        <div className="text-[11px] text-stone-500 mb-2 flex items-center gap-1.5 flex-wrap">
+          <span className="font-bold text-fpv-700">{ar.emoji} {ar.nome}</span>
+          <span>· {o.executor || 'sem executor'}</span>
+          {parado != null && parado > 0 && (
+            <span className={parado > 14 ? 'text-red-600 font-bold' : ''}>· parado {ha(parado)}</span>
           )}
         </div>
+
+        {/* memória de cálculo — edição rápida guiada pela área (conversão EMOP) */}
+        {memEditId === o.id ? (
+          <div className="mb-2 border border-fpv-100 rounded-xl p-2.5 bg-fpv-50/40">
+            <p className="text-[11px] text-fpv-700 font-medium mb-1.5 leading-snug">
+              📐 <b>{ar.emoji} {ar.nome}</b> — {ar.guiaMemoria}
+            </p>
+            <textarea
+              ref={memRef}
+              defaultValue={o.memoria_calculo || ''}
+              rows={3}
+              autoFocus
+              placeholder="ex.: parede 3,85 × 1,20 = 4,62 m² · 2 demãos"
+              className="w-full border border-stone-200 rounded-lg px-2.5 py-2 text-sm bg-white outline-none focus:border-fpv-500"
+            />
+            <div className="flex gap-2 mt-1.5">
+              <button onClick={() => salvarMemoria(o)}
+                className="flex-1 bg-fpv-600 active:bg-fpv-700 text-white font-bold text-xs py-2.5 rounded-lg">
+                Salvar memória
+              </button>
+              <button onClick={() => setMemEditId(null)}
+                className="px-3 border border-stone-200 rounded-lg text-xs font-bold text-stone-500">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setMemEditId(o.id!)}
+            className="w-full mb-2 text-left border border-dashed border-fpv-100 rounded-xl px-2.5 py-2 text-[11px] text-fpv-700 bg-fpv-50/30">
+            📐 <b>Memória:</b>{' '}
+            {(o.memoria_calculo || '').trim()
+              ? `${o.memoria_calculo.slice(0, 90)}${o.memoria_calculo.length > 90 ? '…' : ''}`
+              : 'vazia — toca aqui pra preencher (guia da área aparece)'}
+          </button>
+        )}
         <div className="grid grid-cols-4 gap-1.5 mb-2">
           {pilulas.map(p => {
             const ok = s[p.key];
@@ -669,6 +739,23 @@ const TelaEngenheiro: React.FC<Props> = ({ lista, aoEditar, aoMudar }) => {
           <FiltroChip id="todas"><PenLine size={12} className="inline mr-1" />P/ assinar {totalFolhas}</FiltroChip>
           <FiltroChip id="semfoto"><Camera size={12} className="inline mr-1" />Sem foto {semFoto}</FiltroChip>
           <FiltroChip id="semnum"><Hash size={12} className="inline mr-1" />Sem nº {semNum}</FiltroChip>
+        </div>
+        {/* segmentação por ÁREA — o ciclo do Nicolas roda disciplina a disciplina */}
+        <div className="flex gap-2 mt-1.5 overflow-x-auto pb-1">
+          <button onClick={() => setFiltroArea('todas')}
+            className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${
+              filtroArea === 'todas' ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-600 border-stone-200'
+            }`}>Todas as áreas</button>
+          {AREAS.map(a => {
+            const n = rotaOS.filter(o => areaDe(o).nome === a.nome).length;
+            if (n === 0) return null;
+            return (
+              <button key={a.nome} onClick={() => setFiltroArea(f => (f === a.nome ? 'todas' : a.nome))}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${
+                  filtroArea === a.nome ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-600 border-stone-200'
+                }`}>{a.emoji} {a.nome} {n}</button>
+            );
+          })}
         </div>
       </div>
 
@@ -1029,6 +1116,7 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
                   {o.emergencial && <Zap size={13} className="text-red-400 shrink-0" />}
                   <span className={`font-mono font-bold text-sm ${s.numero ? 'text-stone-900' : 'text-amber-700'}`}>{rotuloOS(o)}</span>
                   <span className="text-xs text-stone-600 truncate flex-1">{o.unidade}</span>
+                  <span className="text-[10px] text-stone-400 shrink-0" title="área">{areaDaOS(o).emoji}</span>
                   {pronta && <span className="text-[9px] font-black bg-fpv-500 text-white rounded px-1.5 py-0.5 shrink-0">PRONTA</span>}
                 </div>
                 <div className="flex items-center gap-2">

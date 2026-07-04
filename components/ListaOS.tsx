@@ -40,6 +40,7 @@ const alertaPrazo = (os: OSCampo) => {
 const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome }) => {
   const [busca, setBusca] = useState('');
   const [soMinhas, setSoMinhas] = useState(!!meuNome);
+  const [mostrar, setMostrar] = useState(100); // com a planilha importada são ~1.800 O.S.
 
   const minhas = meuNome ? lista.filter(os => os.executor === meuNome && os.status !== 'Cancelada') : [];
   const base = meuNome && soMinhas ? minhas : lista;
@@ -108,7 +109,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome }) => {
       )}
 
       <div className="space-y-2">
-        {filtradas.map(os => {
+        {filtradas.slice(0, mostrar).map(os => {
           const alerta = alertaPrazo(os);
           return (
             <div key={os.id} className="flex items-start gap-3 border border-stone-100 rounded-xl p-3 hover:border-fpv-100 transition-colors">
@@ -141,6 +142,12 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome }) => {
           );
         })}
       </div>
+      {filtradas.length > mostrar && (
+        <button onClick={() => setMostrar(m => m + 200)}
+          className="w-full text-xs font-bold text-fpv-700 py-3">
+          Carregar mais ({filtradas.length - mostrar} restantes)
+        </button>
+      )}
     </div>
   );
 };

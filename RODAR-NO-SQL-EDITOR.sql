@@ -40,6 +40,10 @@ select case
   then setval('seq_fict', 76)
 end as seq_ajustada;
 
+-- 2b) ÁREA (disciplina) da O.S. — segmenta rota/chat e guia a memória
+--     de cálculo p/ conversão EMOP (o app funciona sem, mas grava melhor com)
+alter table os_campo add column if not exists area text;
+
 -- 3) CONFERÊNCIA — deve devolver 1 linha com tudo 'OK'
 select
   (select case when exists (select 1 from information_schema.tables

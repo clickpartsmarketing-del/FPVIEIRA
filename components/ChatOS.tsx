@@ -3,6 +3,7 @@ import { Mic, Send, Camera, Check, RotateCcw, Volume2, VolumeX, Loader2, Siren, 
 import { osService } from '../services/osService';
 import { supabase } from '../services/supabaseClient';
 import { ESCOLAS } from '../data/escolas';
+import { AREAS, areaDoTexto } from '../data/areas';
 
 // ============================================================
 // CHAT O.S. — engenharia reversa da planilha de medição:
@@ -12,7 +13,7 @@ import { ESCOLAS } from '../data/escolas';
 // ============================================================
 
 interface Msg { de: 'bot' | 'eu'; texto: string; }
-type Etapa = 'escola' | 'solicitado' | 'executado' | 'materiais' | 'medidas' | 'conclusao' | 'foto' | 'confirma';
+type Etapa = 'escola' | 'area' | 'solicitado' | 'executado' | 'materiais' | 'medidas' | 'conclusao' | 'foto' | 'confirma';
 
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -43,12 +44,13 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const [salvando, setSalvando] = useState(false);
   const [proxFict, setProxFict] = useState<number | null>(null);
   const [executor, setExecutor] = useState('');
-  const [dados, setDados] = useState({ unidade: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null as string | null, status: 'Executando' });
+  const [dados, setDados] = useState({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null as string | null, status: 'Executando' });
   const [fotos, setFotos] = useState<File[]>([]);
 
   // refs espelham o estado para o callback de voz NUNCA ficar preso
   // na pergunta antiga (bug da v1: closure congelada na etapa 'escola')
   const etapaRef = useRef<Etapa>('escola');
+  const areaRef = useRef('');        // espelho da área p/ o callback de voz (closure!)
   const tentativaRef = useRef(0);
   const recRef = useRef<any>(null);
   const bufferRef = useRef('');      // acumula a fala enquanto o dedo segura
@@ -68,15 +70,19 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   const mudarEtapa = (e: Etapa) => { etapaRef.current = e; tentativaRef.current = 0; setEtapa(e); };
 
-  const ORDEM: Etapa[] = ['escola', 'solicitado', 'executado', 'materiais', 'medidas'];
+  const ORDEM: Etapa[] = ['escola', 'area', 'solicitado', 'executado', 'materiais', 'medidas'];
   const PERGUNTA: Record<string, string> = {
     escola: 'Em QUAL ESCOLA você está?',
+    area: '🛠️ Qual a ÁREA do serviço? Hidráulica, elétrica, pintura, alvenaria, esquadrias ou telhado — fala ou toca num botão aí embaixo.',
     solicitado: 'O QUE O FISCAL PEDIU? (a demanda que chegou pra você)',
     executado: '🔨 O que VOCÊ FEZ de verdade aí? (o serviço executado)',
     materiais: '🔩 Quais MATERIAIS gastou? Quantidade + item (ex.: 2 assentos, 1 sifão).',
     medidas: '📐 As MEDIDAS pro cálculo: metros, área ou unidades — só números.',
     conclusao: 'O serviço JÁ TERMINOU? Toca num dos botões aí embaixo. 👇'
   };
+
+  const guiaDaArea = (nome: string) =>
+    (AREAS.find(a => a.nome === nome) || AREAS[AREAS.length - 1]).guiaMemoria;
 
   const falar = (t: string) => {
     if (mudoRef.current || !('speechSynthesis' in window)) return;
@@ -162,6 +168,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   // ===== botões Refazer / Avançar (pedido do campo) =====
   const limparCampoAtual = (et: Etapa) => {
     if (et === 'escola') setDados(d => ({ ...d, unidade: '' }));
+    if (et === 'area') { areaRef.current = ''; setDados(d => ({ ...d, area: '' })); }
     if (et === 'solicitado') setDados(d => ({ ...d, solicitado: '' }));
     if (et === 'executado') setDados(d => ({ ...d, executado: '' }));
     if (et === 'materiais') setDados(d => ({ ...d, materiais: '' }));
@@ -186,6 +193,13 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     const prox = ORDEM[ORDEM.indexOf(et) + 1];
     bot(PERGUNTA[prox]);
     mudarEtapa(prox);
+  };
+
+  const escolherArea = (nome: string, emoji: string) => {
+    areaRef.current = nome;
+    setDados(d => ({ ...d, area: nome }));
+    bot(`${emoji} ${nome} anotada. ${PERGUNTA.solicitado}`);
+    mudarEtapa('solicitado');
   };
 
   // ===== push-to-talk estilo WhatsApp =====
@@ -268,16 +282,25 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       const achada = acharEscola(texto);
       if (achada) {
         setDados(d => ({ ...d, unidade: achada }));
-        bot(`✅ ${achada}. Agora: O QUE O FISCAL PEDIU? (a demanda que chegou pra você)`);
-        mudarEtapa('solicitado');
+        bot(`✅ ${achada}. ${PERGUNTA.area}`);
+        mudarEtapa('area');
       } else if (tentativaRef.current === 0) {
         tentativaRef.current++;
         bot('Não achei essa escola. Me fala só o NOME dela — ex.: "João Bento", "Senhorinha", "CIEP"…');
       } else {
         setDados(d => ({ ...d, unidade: texto }));
-        bot(`Anotei como "${texto}" — a engenharia confere. O QUE O FISCAL PEDIU?`);
-        mudarEtapa('solicitado');
+        bot(`Anotei como "${texto}" — a engenharia confere. ${PERGUNTA.area}`);
+        mudarEtapa('area');
       }
+
+    } else if (et === 'area') {
+      const a = areaDoTexto(texto);
+      if (a.nome === 'Outros' && tentativaRef.current === 0) {
+        tentativaRef.current++;
+        bot('Não peguei a área. Fala uma dessas: hidráulica, elétrica, pintura, alvenaria, esquadrias, telhado — ou toca num botão aí embaixo.');
+        return;
+      }
+      escolherArea(a.nome, a.emoji);
 
     } else if (et === 'solicitado') {
       if (texto.length < 5 && tentativaRef.current === 0) {
@@ -307,7 +330,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         return;
       }
       setDados(d => ({ ...d, materiais: d.materiais ? d.materiais + ' ' + texto : texto }));
-      bot('📐 Agora a parte que vira DINHEIRO na medição: as MEDIDAS. Só números: metros, área, unidades (ex.: "2 unidades de assento" ou "parede 3 e 85 por 1 e 20").');
+      bot(`📐 Agora a parte que vira DINHEIRO na medição — as MEDIDAS. ${guiaDaArea(areaRef.current)}`);
       mudarEtapa('medidas');
 
     } else if (et === 'medidas') {
@@ -360,7 +383,8 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   };
 
   const recomecar = () => {
-    setDados({ unidade: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
+    areaRef.current = '';
+    setDados({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
     setFotos([]); setMsgs([]);
     mudarEtapa('escola');
     bot(`Sem problema, do zero. O.S. F-${proxFict}, ${hojeBR()}. Em QUAL ESCOLA você está?`);
@@ -385,6 +409,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       executor,
       status: dados.status,
       medicao: '',
+      area: dados.area || null,
       solicitado: dados.solicitado,
       servico: dados.executado,
       materiais: dados.materiais,
@@ -395,7 +420,8 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     if (res.ok) {
       const fictReal = res.os?.numero_fict ?? proxFict;
       bot(`🚀 O.S. F-${fictReal} salva no sistema central com data, executor, materiais e memória de cálculo — pronta pra casar com o almoxarifado e virar medição. Bora pra próxima?`);
-      setDados({ unidade: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
+      areaRef.current = '';
+      setDados({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
       setFotos([]);
       const prox = fictReal ? fictReal + 1 : proxFict;
       setProxFict(prox);
@@ -430,6 +456,18 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
             </div>
           </div>
         ))}
+
+        {etapa === 'area' && (
+          <div className="flex flex-wrap gap-2 justify-center pt-2">
+            {AREAS.map(a => (
+              <button key={a.nome}
+                onClick={() => { eu(`${a.emoji} ${a.nome}`); escolherArea(a.nome, a.emoji); }}
+                className="bg-white border border-fpv-100 text-fpv-700 font-bold text-xs px-3.5 py-2.5 rounded-full shadow-sm">
+                {a.emoji} {a.nome}
+              </button>
+            ))}
+          </div>
+        )}
 
         {etapa === 'conclusao' && (
           <div className="flex gap-2 justify-center pt-2">
@@ -473,6 +511,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
           <div className="bg-white rounded-2xl border-2 border-fpv-100 p-4 mt-2 text-sm space-y-1.5">
             <div className="font-bold text-fpv-700 mb-2">📋 Resumo — O.S. F-{proxFict} · {hojeBR()}</div>
             <div><b>Escola:</b> {dados.unidade || '—'}</div>
+            <div><b>Área:</b> {dados.area || '—'}</div>
             <div><b>Fiscal pediu:</b> {dados.solicitado || '—'}</div>
             <div><b>Foi feito:</b> {dados.executado || '—'}</div>
             <div><b>Materiais:</b> {dados.materiais || '—'}</div>

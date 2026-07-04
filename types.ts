@@ -11,6 +11,7 @@ export interface OSCampo {
   executor: string;
   status: string;
   medicao: string;
+  area?: string | null;
   solicitado?: string;
   servico: string;
   materiais: string;
