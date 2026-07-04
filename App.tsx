@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, RefreshCw } from 'lucide-react';
+import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, RefreshCw, Package } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { osService } from './services/osService';
 import { OSCampo } from './types';
@@ -8,8 +8,9 @@ import ChatOS from './components/ChatOS';
 import NovaOS from './components/NovaOS';
 import ListaOS from './components/ListaOS';
 import FechamentoSemanal from './components/FechamentoSemanal';
+import AlmoxOS from './components/AlmoxOS';
 
-type Aba = 'chat' | 'nova' | 'lista' | 'fechamento';
+type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'fechamento';
 
 const App: React.FC = () => {
   const [sessao, setSessao] = useState<any>(null);
@@ -75,6 +76,7 @@ const App: React.FC = () => {
             aoMudar={recarregar}
           />
         )}
+        {aba === 'almox' && <AlmoxOS listaOS={lista} />}
         {aba === 'fechamento' && <FechamentoSemanal lista={lista} />}
       </main>
 
@@ -82,7 +84,8 @@ const App: React.FC = () => {
         <div className="max-w-3xl mx-auto flex gap-2">
           <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />
           <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />
-          <TabBtn id="lista" icon={ListChecks} label={`Lançadas (${lista.length})`} />
+          <TabBtn id="lista" icon={ListChecks} label={`O.S. (${lista.length})`} />
+          <TabBtn id="almox" icon={Package} label="Almox" />
           <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />
         </div>
       </nav>
