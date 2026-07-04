@@ -88,6 +88,13 @@ const FechamentoSemanal: React.FC<Props> = ({ lista }) => {
               </tbody>
             </table>
 
+            {os.solicitado && (
+              <div className="mb-4">
+                <div className="text-[11px] font-bold uppercase text-stone-400 mb-1">Solicitação do fiscal</div>
+                <div className="text-sm text-stone-900 border border-stone-200 rounded-lg p-3 min-h-[40px]">{os.solicitado}</div>
+              </div>
+            )}
+
             <div className="mb-4">
               <div className="text-[11px] font-bold uppercase text-stone-400 mb-1">Serviço executado</div>
               <div className="text-sm text-stone-900 border border-stone-200 rounded-lg p-3 min-h-[52px]">{os.servico || ' '}</div>

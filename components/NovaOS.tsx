@@ -7,7 +7,7 @@ import { osService } from '../services/osService';
 const VAZIA: OSCampo = {
   numero: null, emergencial: false, unidade: '', fiscal: 'Wellington', classificacao: 'Normal',
   entrada: new Date().toISOString().slice(0, 10), conclusao: null, executor: '', status: 'Executando',
-  medicao: '', servico: '', materiais: '', memoria_calculo: '', foto_urls: []
+  medicao: '', solicitado: '', servico: '', materiais: '', memoria_calculo: '', foto_urls: []
 };
 
 interface Props {
@@ -151,6 +151,13 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
             {MED_OPTIONS.map(m => <option key={m} value={m}>{m || '—'}</option>)}
           </select>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">O que o fiscal solicitou</label>
+        <textarea value={os.solicitado ?? ''} onChange={e => campo('solicitado', e.target.value)} rows={2}
+          placeholder="a demanda que chegou (e-mail, WhatsApp ou verbal do fiscal)"
+          className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 resize-y" />
       </div>
 
       <div>
