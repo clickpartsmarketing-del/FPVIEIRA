@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, RefreshCw, Package } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, RefreshCw, Package, LayoutDashboard } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { osService } from './services/osService';
 import { OSCampo } from './types';
@@ -30,6 +30,18 @@ const App: React.FC = () => {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // gestores, engenheiro e medição abrem direto na tela deles — SÓ 1x por login
+  // (refresh de token dispara onAuthStateChange e não pode teleportar o usuário)
+  const jaDirecionou = useRef(false);
+  useEffect(() => {
+    if (!sessao) { jaDirecionou.current = false; return; }
+    const u = sessao.user?.email?.split('@')[0];
+    if (u && GESTORES.includes(u) && !jaDirecionou.current) {
+      jaDirecionou.current = true;
+      setAba('gestao');
+    }
+  }, [sessao]);
+
   const recarregar = async () => setLista(await osService.listar());
 
   useEffect(() => { if (sessao) recarregar(); }, [sessao]);
@@ -41,8 +53,8 @@ const App: React.FC = () => {
 
   const TabBtn = ({ id, icon: Icon, label }: { id: Aba; icon: any; label: string }) => (
     <button onClick={() => { setAba(id); if (id !== 'nova') setEditando(null); }}
-      className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl text-[11px] font-bold transition-colors ${aba === id ? 'bg-fpv-500 text-white' : 'text-stone-500 hover:bg-stone-100'}`}>
-      <Icon size={19} /> {label}
+      className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2.5 rounded-xl text-[11px] font-bold transition-colors ${aba === id ? 'bg-fpv-500 text-white' : 'text-stone-500 hover:bg-stone-100'}`}>
+      <Icon size={19} /> <span className="max-w-full truncate leading-tight">{label}</span>
     </button>
   );
 
@@ -79,17 +91,25 @@ const App: React.FC = () => {
           />
         )}
         {aba === 'almox' && <AlmoxOS listaOS={lista} />}
-        {aba === 'gestao' && <Gestao lista={lista} papel={usuario} />}
+        {aba === 'gestao' && (
+          <Gestao
+            lista={lista}
+            papel={usuario}
+            aoEditar={(os) => { setEditando(os); setAba('nova'); }}
+            aoMudar={recarregar}
+            aoVerLista={() => setAba('lista')}
+          />
+        )}
         {aba === 'fechamento' && <FechamentoSemanal lista={lista} />}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 px-4 py-2 print-hidden">
-        <div className="max-w-3xl mx-auto flex gap-2">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-stone-200 px-4 py-2 print-hidden">
+        <div className="max-w-3xl mx-auto flex gap-1">
           <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />
           <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />
           <TabBtn id="lista" icon={ListChecks} label={`O.S. (${lista.length})`} />
           <TabBtn id="almox" icon={Package} label="Almox" />
-          {GESTORES.includes(usuario) && <TabBtn id="gestao" icon={RefreshCw} label="Gestão" />}
+          {GESTORES.includes(usuario) && <TabBtn id="gestao" icon={LayoutDashboard} label="Gestão" />}
           <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />
         </div>
       </nav>
