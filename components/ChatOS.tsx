@@ -50,6 +50,11 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const [sugArea, setSugArea] = useState<{ nome: string; emoji: string } | null>(null);
   const [fotos, setFotos] = useState<File[]>([]);
 
+  // AUDITORIA: URL.createObjectURL a cada render vazava memória no celular
+  // de campo — agora cria 1x por foto e revoga ao trocar/desmontar
+  const previews = React.useMemo(() => fotos.map(f => URL.createObjectURL(f)), [fotos]);
+  useEffect(() => () => { previews.forEach(u => URL.revokeObjectURL(u)); }, [previews]);
+
   // refs espelham o estado para o callback de voz NUNCA ficar preso
   // na pergunta antiga (bug da v1: closure congelada na etapa 'escola')
   const etapaRef = useRef<Etapa>('escola');
@@ -455,10 +460,13 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   const confirmar = async () => {
     setSalvando(true);
-    const urls: string[] = [];
-    for (const f of fotos) {
-      const u = await osService.uploadFoto(f);
-      if (u) urls.push(u);
+    // AUDITORIA: falha de upload agora AVISA em vez de engolir — a foto
+    // é a defesa contra glosa; perder sem saber custa dinheiro na medição.
+    const { urls, falhas } = await osService.uploadFotos(fotos);
+    if (falhas > 0) {
+      setSalvando(false);
+      bot(`⚠️ ${falhas} foto(s) NÃO subiram (sinal fraco?). Toca em CONFIRMAR de novo pra tentar outra vez — ou remove as fotos e confirma sem elas.`);
+      return;
     }
     const res = await osService.salvar({
       numero: null,
@@ -569,7 +577,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
           <div className="flex gap-1.5 flex-wrap justify-center pt-2">
             {fotos.map((f, i) => (
               <div key={i} className="relative">
-                <img src={URL.createObjectURL(f)} alt={`foto ${i + 1}`}
+                <img src={previews[i]} alt={`foto ${i + 1}`}
                   className="w-16 h-16 object-cover rounded-lg border-2 border-white shadow-sm" />
                 <button onClick={() => setFotos(fotos.filter((_, j) => j !== i))}
                   className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-[11px] font-bold leading-none shadow">×</button>

@@ -8,6 +8,7 @@ interface Props {
   aoEditar: (os: OSCampo) => void;
   aoMudar: () => void;
   meuNome?: string; // encarregado logado → habilita "Minhas O.S." com alerta de prazo
+  podeExcluir?: boolean; // AUDITORIA: excluir O.S. (dado de medição!) só gestão
 }
 
 const pillCor = (status: string) => {
@@ -37,7 +38,7 @@ const alertaPrazo = (os: OSCampo) => {
   return null;
 };
 
-const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome }) => {
+const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome, podeExcluir = false }) => {
   const [busca, setBusca] = useState('');
   const [soMinhas, setSoMinhas] = useState(!!meuNome);
   const [mostrar, setMostrar] = useState(100); // com a planilha importada são ~1.800 O.S.
@@ -135,8 +136,10 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome }) => {
                 )}
                 <button onClick={() => aoEditar(os)} title="Editar"
                   className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-stone-50 rounded-lg"><Pencil size={16} /></button>
-                <button onClick={() => excluir(os)} title="Excluir"
-                  className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                {podeExcluir && (
+                  <button onClick={() => excluir(os)} title="Excluir"
+                    className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                )}
               </div>
             </div>
           );

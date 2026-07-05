@@ -2,7 +2,10 @@ import { supabase } from './supabaseClient';
 import { OSCampo } from '../types';
 
 export const osService = {
-  async listar(): Promise<OSCampo[]> {
+  // AUDITORIA: antes, um erro no meio da paginação devolvia lista PARCIAL
+  // em silêncio → KPIs da Gestão calculados sobre dados incompletos sem
+  // ninguém saber. Agora devolve { dados, erro } e o App decide o que exibir.
+  async listar(): Promise<{ dados: OSCampo[]; erro: string | null }> {
     // o PostgREST corta em 1000 linhas por requisição — com a planilha
     // importada (~1.8k O.S.) é preciso paginar até vir página incompleta
     const PAGINA = 1000;
@@ -13,11 +16,14 @@ export const osService = {
         .select('*')
         .order('criado_em', { ascending: false })
         .range(off, off + PAGINA - 1);
-      if (error) { console.error('Erro ao listar O.S.:', error.message); break; }
+      if (error) {
+        console.error('Erro ao listar O.S.:', error.message);
+        return { dados: todas, erro: error.message };
+      }
       todas.push(...(data as OSCampo[]));
       if (!data || data.length < PAGINA) break;
     }
-    return todas;
+    return { dados: todas, erro: null };
   },
 
   async salvar(os: OSCampo): Promise<{ ok: boolean; erro?: string; os?: OSCampo }> {
@@ -92,5 +98,17 @@ export const osService = {
       console.error('Erro no upload da foto:', e.message);
       return null;
     }
+  },
+
+  // AUDITORIA: sobe o lote e informa quantas FALHARAM — foto de evidência
+  // perdida em silêncio é glosa na medição. Quem chama decide avisar.
+  async uploadFotos(files: File[]): Promise<{ urls: string[]; falhas: number }> {
+    const urls: string[] = [];
+    let falhas = 0;
+    for (const f of files) {
+      const u = await this.uploadFoto(f);
+      if (u) urls.push(u); else falhas++;
+    }
+    return { urls, falhas };
   }
 };

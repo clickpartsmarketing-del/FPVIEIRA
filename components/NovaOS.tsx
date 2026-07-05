@@ -61,16 +61,19 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
     setSalvando(true);
     setMsg('');
 
-    const urls = [...os.foto_urls];
-    for (const f of fotos) {
-      const url = await osService.uploadFoto(f);
-      if (url) urls.push(url);
+    // AUDITORIA: se o upload de foto falhar (sinal ruim na escola), NÃO salva
+    // silenciosamente sem evidência — pergunta antes. Foto perdida = risco de glosa.
+    const { urls: novas, falhas } = await osService.uploadFotos(fotos);
+    if (falhas > 0) {
+      const segue = confirm(`⚠️ ${falhas} foto(s) FALHARAM no envio (sinal fraco?).\n\nOK = salvar mesmo assim (sem essas fotos)\nCancelar = tentar de novo com as fotos`);
+      if (!segue) { setSalvando(false); setMsg(`Envio pausado — ${falhas} foto(s) não subiram. Tente salvar de novo.`); return; }
     }
+    const urls = [...os.foto_urls, ...novas];
 
     const resultado = await osService.salvar({ ...os, foto_urls: urls, numero: os.numero ? Number(os.numero) : null });
     setSalvando(false);
     if (resultado.ok) {
-      setMsg(os.id ? 'O.S. atualizada ✔' : 'O.S. registrada no banco central ✔');
+      setMsg((os.id ? 'O.S. atualizada ✔' : 'O.S. registrada no banco central ✔') + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : ''));
       setOs({ ...VAZIA });
       setFotos([]);
       aoSalvar();

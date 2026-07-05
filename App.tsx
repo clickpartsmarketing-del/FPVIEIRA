@@ -16,7 +16,7 @@ const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v15';
+const VERSAO = 'v16';
 
 // quem enxerga a aba Almoxarifado (equipes de emergência só RETIRAM —
 // o lançamento é do almoxarife; gestão acompanha)
@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [aba, setAba] = useState<Aba>('chat');
   const [lista, setLista] = useState<OSCampo[]>([]);
   const [editando, setEditando] = useState<OSCampo | null>(null);
+  const [erroLista, setErroLista] = useState('');
   const [trocandoSenha, setTrocandoSenha] = useState(false);
   const [novaSenha, setNovaSenha] = useState('');
   const [novaSenha2, setNovaSenha2] = useState('');
@@ -58,7 +59,11 @@ const App: React.FC = () => {
     }
   }, [sessao]);
 
-  const recarregar = async () => setLista(await osService.listar());
+  const recarregar = async () => {
+    const { dados, erro } = await osService.listar();
+    setLista(dados);
+    setErroLista(erro ? 'Conexão instável — a lista pode estar INCOMPLETA. Toque em ↻ para tentar de novo.' : '');
+  };
 
   useEffect(() => { if (sessao) recarregar(); }, [sessao]);
 
@@ -129,6 +134,14 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {erroLista && (
+        <div className="max-w-3xl mx-auto px-4 pt-3 print-hidden">
+          <div className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            ⚠️ {erroLista}
+          </div>
+        </div>
+      )}
+
       <main className="max-w-3xl mx-auto p-4">
         {aba === 'chat' && <ChatOS aoSalvar={recarregar} />}
         {aba === 'nova' && (
@@ -144,6 +157,7 @@ const App: React.FC = () => {
             aoEditar={(os) => { setEditando(os); setAba('nova'); }}
             aoMudar={recarregar}
             meuNome={meuNome}
+            podeExcluir={GESTORES.includes(usuario)}
           />
         )}
         {aba === 'almox' && veAlmox && <AlmoxOS listaOS={lista} />}
