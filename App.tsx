@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, RefreshCw, Package, LayoutDashboard } from 'lucide-react';
+import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, RefreshCw, Package, LayoutDashboard, KeyRound, X } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { osService } from './services/osService';
 import { OSCampo, EXECUTOR_OPTIONS } from './types';
@@ -16,7 +16,11 @@ const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v13';
+const VERSAO = 'v14';
+
+// quem enxerga a aba Almoxarifado (equipes de emergência só RETIRAM —
+// o lançamento é do almoxarife; gestão acompanha)
+const ALMOX = ['joao'];
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -28,6 +32,10 @@ const App: React.FC = () => {
   const [aba, setAba] = useState<Aba>('chat');
   const [lista, setLista] = useState<OSCampo[]>([]);
   const [editando, setEditando] = useState<OSCampo | null>(null);
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const [novaSenha, setNovaSenha] = useState('');
+  const [novaSenha2, setNovaSenha2] = useState('');
+  const [senhaMsg, setSenhaMsg] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -61,6 +69,16 @@ const App: React.FC = () => {
   const meuNome = GESTORES.includes(usuario)
     ? undefined
     : EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
+  const veAlmox = ALMOX.includes(usuario) || GESTORES.includes(usuario);
+
+  const trocarSenha = async () => {
+    if (novaSenha.length < 6) { setSenhaMsg('A senha precisa de pelo menos 6 caracteres.'); return; }
+    if (novaSenha !== novaSenha2) { setSenhaMsg('As duas senhas não conferem.'); return; }
+    const { error } = await supabase.auth.updateUser({ password: novaSenha });
+    if (error) { setSenhaMsg('Erro: ' + error.message); return; }
+    setTrocandoSenha(false); setNovaSenha(''); setNovaSenha2(''); setSenhaMsg('');
+    alert('✅ Senha alterada! Use a nova no próximo login.');
+  };
 
   const TabBtn = ({ id, icon: Icon, label }: { id: Aba; icon: any; label: string }) => (
     <button onClick={() => { setAba(id); if (id !== 'nova') setEditando(null); }}
@@ -77,6 +95,9 @@ const App: React.FC = () => {
           <div className="font-bold text-stone-900 text-sm">FPV Campo</div>
           <div className="text-[11px] text-stone-500">FP.094 Educação · {usuario} · <span className="text-stone-300">{VERSAO}</span></div>
         </div>
+        <button onClick={() => { setTrocandoSenha(true); setSenhaMsg(''); }} title="Alterar senha" className="p-2 text-stone-400 hover:text-fpv-600 rounded-lg hover:bg-stone-50">
+          <KeyRound size={18} />
+        </button>
         <button onClick={recarregar} title="Atualizar" className="p-2 text-stone-400 hover:text-fpv-600 rounded-lg hover:bg-stone-50">
           <RefreshCw size={18} />
         </button>
@@ -84,6 +105,29 @@ const App: React.FC = () => {
           <LogOut size={18} />
         </button>
       </header>
+
+      {trocandoSenha && (
+        <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4 print-hidden" onClick={() => setTrocandoSenha(false)}>
+          <div className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <KeyRound size={18} className="text-fpv-600" />
+              <h3 className="font-bold text-stone-900 flex-1">Alterar minha senha</h3>
+              <button onClick={() => setTrocandoSenha(false)} className="p-1 text-stone-400"><X size={18} /></button>
+            </div>
+            <input type="password" value={novaSenha} onChange={e => setNovaSenha(e.target.value)}
+              placeholder="Nova senha (mín. 6 caracteres)"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 mb-2" />
+            <input type="password" value={novaSenha2} onChange={e => setNovaSenha2(e.target.value)}
+              placeholder="Repete a nova senha"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 mb-2" />
+            {senhaMsg && <p className="text-xs font-bold text-red-600 mb-2">{senhaMsg}</p>}
+            <button onClick={trocarSenha}
+              className="w-full bg-fpv-500 hover:bg-fpv-600 text-white font-bold py-3 rounded-xl">
+              Salvar nova senha
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-3xl mx-auto p-4">
         {aba === 'chat' && <ChatOS aoSalvar={recarregar} />}
@@ -102,7 +146,7 @@ const App: React.FC = () => {
             meuNome={meuNome}
           />
         )}
-        {aba === 'almox' && <AlmoxOS listaOS={lista} />}
+        {aba === 'almox' && veAlmox && <AlmoxOS listaOS={lista} />}
         {aba === 'gestao' && (
           <Gestao
             lista={lista}
@@ -120,7 +164,7 @@ const App: React.FC = () => {
           <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />
           <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />
           <TabBtn id="lista" icon={ListChecks} label={`O.S. (${lista.length})`} />
-          <TabBtn id="almox" icon={Package} label="Almox" />
+          {veAlmox && <TabBtn id="almox" icon={Package} label="Almox" />}
           {GESTORES.includes(usuario) && <TabBtn id="gestao" icon={LayoutDashboard} label="Gestão" />}
           <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />
         </div>

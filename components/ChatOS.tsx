@@ -66,6 +66,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const chunksRef = useRef<Blob[]>([]);
   const audioModoRef = useRef(true);   // tenta áudio real; cai p/ voz do navegador se falhar
   const [segundos, setSegundos] = useState(0);
+  const inicioGravRef = useRef(0);   // duração real do áudio (closure do cronômetro congela)
   const [transcrevendo, setTranscrevendo] = useState(false);
   const mudoRef = useRef(mudo);
   mudoRef.current = mudo;
@@ -119,6 +120,13 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
           if (ev.results[i].isFinal) bufferRef.current += ev.results[i][0].transcript + ' ';
         }
       };
+      r.onerror = (ev: any) => {
+        if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) {
+          segurandoRef.current = false;
+          setOuvindo(false);
+          bot('🎙️ Microfone bloqueado no navegador. Libera no cadeado 🔒 da barra de endereço → Microfone → Permitir.');
+        }
+      };
       r.onend = () => {
         // Chrome desliga sozinho em pausas de fala — se o dedo AINDA está
         // no botão, religa o motor e continua acumulando (estilo WhatsApp)
@@ -154,9 +162,15 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       const { data, error } = await supabase.functions.invoke('transcrever', { body: fd });
       setTranscrevendo(false);
       const texto = (data as any)?.texto?.trim();
-      if (error || !texto) {
+      if (error) {
+        // servidor falhou de verdade → cai pro reconhecimento do navegador
         audioModoRef.current = false;
-        bot('⚠️ Transcrição indisponível (função "transcrever" ainda não configurada no Supabase). Sem problema: voltei pro modo do navegador — segura e fala de novo.');
+        bot('⚠️ Falha na transcrição do servidor — voltei pro modo do navegador. Segura e fala de novo.');
+        return;
+      }
+      if (!texto) {
+        // áudio veio vazio/inaudível — NÃO é defeito da função: pede de novo
+        bot('🤔 Não entendi o áudio — chega mais perto do microfone e fala de novo, sem pressa.');
         return;
       }
       enviarResposta(texto);
@@ -225,18 +239,26 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         mr.onstop = () => {
           stream.getTracks().forEach(t => t.stop());
           setOuvindo(false);
-          const dur = segundos;
+          const dur = Math.max(1, Math.round((Date.now() - inicioGravRef.current) / 1000));
           const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
           chunksRef.current = [];
           if (!cancelRef.current && blob.size > 2000) transcreverAudio(blob, dur);
           cancelRef.current = false;
         };
         mediaRef.current = mr;
+        inicioGravRef.current = Date.now();
         mr.start(250);
         segurandoRef.current = true;
         setOuvindo(true);
         return;
-      } catch { audioModoRef.current = false; /* sem permissão/suporte → modo 2 */ }
+      } catch (err: any) {
+        if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+          // microfone BLOQUEADO (acontece após "limpar dados do site")
+          bot('🎙️ O microfone está BLOQUEADO no navegador. Toca no cadeado 🔒 na barra de endereço → Permissões → Microfone → Permitir. Aí segura e fala de novo.');
+          return; // não finge que está gravando
+        }
+        audioModoRef.current = false; /* sem suporte → modo 2 */
+      }
     }
 
     // MODO 2 — reconhecimento do navegador (fallback)
