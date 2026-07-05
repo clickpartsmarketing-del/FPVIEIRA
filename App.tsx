@@ -14,6 +14,10 @@ import Gestao from './components/Gestao';
 type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento';
 const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
 
+// versão visível no cabeçalho — se o campo reportar tela antiga,
+// primeiro confere este número (cache de bundle no celular!)
+const VERSAO = 'v13';
+
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
 const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
@@ -71,7 +75,7 @@ const App: React.FC = () => {
         <div className="w-9 h-9 rounded-lg bg-fpv-500 text-white flex items-center justify-center font-bold text-xs">FPV</div>
         <div className="flex-1 leading-tight">
           <div className="font-bold text-stone-900 text-sm">FPV Campo</div>
-          <div className="text-[11px] text-stone-500">FP.094 Educação · {usuario}</div>
+          <div className="text-[11px] text-stone-500">FP.094 Educação · {usuario} · <span className="text-stone-300">{VERSAO}</span></div>
         </div>
         <button onClick={recarregar} title="Atualizar" className="p-2 text-stone-400 hover:text-fpv-600 rounded-lg hover:bg-stone-50">
           <RefreshCw size={18} />

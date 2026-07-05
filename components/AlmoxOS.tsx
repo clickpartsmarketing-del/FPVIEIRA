@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { PackageMinus, Save, Loader2, Trash2, Link2 } from 'lucide-react';
+import { PackageMinus, Save, Loader2, Trash2, Link2, Undo2, Pencil } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { OSCampo } from '../types';
 import { MATERIAIS, UNIDADES, ORIGENS } from '../data/materiais';
@@ -86,6 +86,37 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
     carregar();
   };
 
+  // DEVOLUÇÃO: pediu 8, usou 6, voltaram 2 → linha negativa devolve ao saldo
+  // (mantém o rastro: a saída original fica intacta, a devolução é auditável)
+  const devolver = async (s: Saida) => {
+    const resp = prompt(
+      `Quantas ${s.unidade} de "${s.descricao}" VOLTARAM pro estoque?\n` +
+      `(saíram ${s.quantidade}${s.os_ref ? ' na O.S. ' + s.os_ref : ''})`
+    );
+    if (resp == null) return;
+    const q = parseFloat(resp.replace(',', '.'));
+    if (!q || q <= 0) { setMsg('Quantidade de devolução inválida.'); return; }
+    if (q > s.quantidade) { setMsg(`Devolução (${q}) maior que a saída (${s.quantidade}) — confere aí.`); return; }
+    const { error } = await supabase.from('saida_material').insert([{
+      data: hoje(), descricao: s.descricao, quantidade: -q, unidade: s.unidade,
+      os_ref: s.os_ref || null, escola: s.escola, origem: 'DEVOLUÇÃO'
+    }]);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`↩ Devolução registrada: +${q} ${s.unidade} ${s.descricao} de volta ao saldo${s.os_ref ? ' (O.S. ' + s.os_ref + ')' : ''}.`);
+    carregar();
+  };
+
+  const editarQt = async (s: Saida) => {
+    const resp = prompt(`Corrigir a quantidade de "${s.descricao}" (atual: ${s.quantidade} ${s.unidade}):`, String(s.quantidade));
+    if (resp == null) return;
+    const q = parseFloat(resp.replace(',', '.'));
+    if (isNaN(q) || q === 0) { setMsg('Quantidade inválida.'); return; }
+    const { error } = await supabase.from('saida_material').update({ quantidade: q }).eq('id', s.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`✏️ Corrigido: ${q} ${s.unidade} ${s.descricao}.`);
+    carregar();
+  };
+
   return (
     <div className="space-y-4">
       <form onSubmit={salvar} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
@@ -162,16 +193,30 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
         <h3 className="font-bold text-stone-900 mb-3 text-sm">Últimas saídas <span className="text-stone-400 font-medium">({saidas.length})</span></h3>
         {saidas.length === 0 && <p className="text-sm text-stone-400 text-center py-5">Nenhuma saída registrada ainda.</p>}
         <div className="space-y-1.5">
-          {saidas.map(s => (
-            <div key={s.id} className="flex items-center gap-3 border border-stone-100 rounded-xl px-3 py-2 text-sm">
-              <span className="text-[11px] text-stone-400 tabular-nums shrink-0">{s.data?.split('-').reverse().slice(0, 2).join('/')}</span>
-              <span className="flex-1 min-w-0 truncate"><b>{s.quantidade} {s.unidade}</b> {s.descricao}</span>
-              {s.os_ref
-                ? <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">O.S. {s.os_ref}</span>
-                : <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">sem O.S.</span>}
-              <button onClick={() => excluir(s)} className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
-            </div>
-          ))}
+          {saidas.map(s => {
+            const dev = s.quantidade < 0 || /devolu/i.test(s.origem || '');
+            return (
+              <div key={s.id} className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${dev ? 'border-amber-200 bg-amber-50/60' : 'border-stone-100'}`}>
+                <span className="text-[11px] text-stone-400 tabular-nums shrink-0">{s.data?.split('-').reverse().slice(0, 2).join('/')}</span>
+                <span className="flex-1 min-w-0 truncate">
+                  {dev
+                    ? <b className="text-amber-700">↩ +{Math.abs(s.quantidade)} {s.unidade}</b>
+                    : <b>{s.quantidade} {s.unidade}</b>} {s.descricao}
+                  {dev && <span className="text-[10px] text-amber-700 font-bold"> · devolução</span>}
+                </span>
+                {s.os_ref
+                  ? <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">O.S. {s.os_ref}</span>
+                  : <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">sem O.S.</span>}
+                {!dev && (
+                  <button onClick={() => devolver(s)} title="Devolução ao estoque"
+                    className="p-1 text-stone-300 hover:text-amber-600 shrink-0"><Undo2 size={14} /></button>
+                )}
+                <button onClick={() => editarQt(s)} title="Corrigir quantidade"
+                  className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={14} /></button>
+                <button onClick={() => excluir(s)} className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

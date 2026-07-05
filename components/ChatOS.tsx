@@ -45,12 +45,14 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const [proxFict, setProxFict] = useState<number | null>(null);
   const [executor, setExecutor] = useState('');
   const [dados, setDados] = useState({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null as string | null, status: 'Executando' });
+  const [sugArea, setSugArea] = useState<{ nome: string; emoji: string } | null>(null);
   const [fotos, setFotos] = useState<File[]>([]);
 
   // refs espelham o estado para o callback de voz NUNCA ficar preso
   // na pergunta antiga (bug da v1: closure congelada na etapa 'escola')
   const etapaRef = useRef<Etapa>('escola');
   const areaRef = useRef('');        // espelho da área p/ o callback de voz (closure!)
+  const sugRef = useRef<{ nome: string; emoji: string } | null>(null); // área sugerida pelo pedido
   const tentativaRef = useRef(0);
   const recRef = useRef<any>(null);
   const bufferRef = useRef('');      // acumula a fala enquanto o dedo segura
@@ -70,10 +72,10 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   const mudarEtapa = (e: Etapa) => { etapaRef.current = e; tentativaRef.current = 0; setEtapa(e); };
 
-  const ORDEM: Etapa[] = ['escola', 'area', 'solicitado', 'executado', 'materiais', 'medidas'];
+  const ORDEM: Etapa[] = ['escola', 'solicitado', 'area', 'executado', 'materiais', 'medidas'];
   const PERGUNTA: Record<string, string> = {
     escola: 'Em QUAL ESCOLA você está?',
-    area: '🛠️ Qual a ÁREA do serviço? Hidráulica, elétrica, pintura, alvenaria, esquadrias ou telhado — fala ou toca num botão aí embaixo.',
+    area: '🛠️ Qual a ÁREA? Elétrica, hidráulica, pintura… ou toca num botão. 👇',
     solicitado: 'O QUE O FISCAL PEDIU? (a demanda que chegou pra você)',
     executado: '🔨 O que VOCÊ FEZ de verdade aí? (o serviço executado)',
     materiais: '🔩 Quais MATERIAIS gastou? Quantidade + item (ex.: 2 assentos, 1 sifão).',
@@ -168,7 +170,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   // ===== botões Refazer / Avançar (pedido do campo) =====
   const limparCampoAtual = (et: Etapa) => {
     if (et === 'escola') setDados(d => ({ ...d, unidade: '' }));
-    if (et === 'area') { areaRef.current = ''; setDados(d => ({ ...d, area: '' })); }
+    if (et === 'area') { areaRef.current = ''; sugRef.current = null; setSugArea(null); setDados(d => ({ ...d, area: '' })); }
     if (et === 'solicitado') setDados(d => ({ ...d, solicitado: '' }));
     if (et === 'executado') setDados(d => ({ ...d, executado: '' }));
     if (et === 'materiais') setDados(d => ({ ...d, materiais: '' }));
@@ -197,9 +199,11 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   const escolherArea = (nome: string, emoji: string) => {
     areaRef.current = nome;
+    sugRef.current = null;
+    setSugArea(null);
     setDados(d => ({ ...d, area: nome }));
-    bot(`${emoji} ${nome} anotada. ${PERGUNTA.solicitado}`);
-    mudarEtapa('solicitado');
+    bot(`${emoji} ${nome} anotada. ${PERGUNTA.executado}`);
+    mudarEtapa('executado');
   };
 
   // ===== push-to-talk estilo WhatsApp =====
@@ -282,25 +286,16 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       const achada = acharEscola(texto);
       if (achada) {
         setDados(d => ({ ...d, unidade: achada }));
-        bot(`✅ ${achada}. ${PERGUNTA.area}`);
-        mudarEtapa('area');
+        bot(`✅ ${achada}. ${PERGUNTA.solicitado}`);
+        mudarEtapa('solicitado');
       } else if (tentativaRef.current === 0) {
         tentativaRef.current++;
         bot('Não achei essa escola. Me fala só o NOME dela — ex.: "João Bento", "Senhorinha", "CIEP"…');
       } else {
         setDados(d => ({ ...d, unidade: texto }));
-        bot(`Anotei como "${texto}" — a engenharia confere. ${PERGUNTA.area}`);
-        mudarEtapa('area');
+        bot(`Anotei como "${texto}" — a engenharia confere. ${PERGUNTA.solicitado}`);
+        mudarEtapa('solicitado');
       }
-
-    } else if (et === 'area') {
-      const a = areaDoTexto(texto);
-      if (a.nome === 'Outros' && tentativaRef.current === 0) {
-        tentativaRef.current++;
-        bot('Não peguei a área. Fala uma dessas: hidráulica, elétrica, pintura, alvenaria, esquadrias, telhado — ou toca num botão aí embaixo.');
-        return;
-      }
-      escolherArea(a.nome, a.emoji);
 
     } else if (et === 'solicitado') {
       if (texto.length < 5 && tentativaRef.current === 0) {
@@ -309,8 +304,32 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         return;
       }
       setDados(d => ({ ...d, solicitado: d.solicitado ? d.solicitado + ' ' + texto : texto }));
-      bot('🔨 E o que VOCÊ FEZ de verdade aí? (o serviço executado)');
-      mudarEtapa('executado');
+      // ÁREA autopreenchida pelo pedido: confirma com 1 toque (ou 1 "sim")
+      const sug = areaDoTexto(texto);
+      if (sug.nome !== 'Outros') {
+        sugRef.current = { nome: sug.nome, emoji: sug.emoji };
+        setSugArea({ nome: sug.nome, emoji: sug.emoji });
+        bot(`${sug.emoji} Parece ${sug.nome.toUpperCase()} — confirma? Toca no ✔ ou escolhe outra. 👇`);
+      } else {
+        sugRef.current = null;
+        setSugArea(null);
+        bot(PERGUNTA.area);
+      }
+      mudarEtapa('area');
+
+    } else if (et === 'area') {
+      const confirmou = /^(sim|si|isso|confirma|confirmo|correto|certo|beleza|ok|positivo|exato|e isso|é isso|eh isso|pode ser)\b/i.test(texto.trim());
+      if (confirmou && sugRef.current) {
+        escolherArea(sugRef.current.nome, sugRef.current.emoji);
+        return;
+      }
+      const a = areaDoTexto(texto);
+      if (a.nome === 'Outros' && !/outr/i.test(texto) && tentativaRef.current === 0) {
+        tentativaRef.current++;
+        bot('Não peguei. Fala: elétrica, hidráulica, pintura, alvenaria, esquadrias, telhado — ou toca num botão. 👇');
+        return;
+      }
+      escolherArea(a.nome, a.emoji);
 
     } else if (et === 'executado') {
       if (texto.length < 5 && tentativaRef.current === 0) {
@@ -384,6 +403,8 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
   const recomecar = () => {
     areaRef.current = '';
+    sugRef.current = null;
+    setSugArea(null);
     setDados({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
     setFotos([]); setMsgs([]);
     mudarEtapa('escola');
@@ -421,6 +442,8 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       const fictReal = res.os?.numero_fict ?? proxFict;
       bot(`🚀 O.S. F-${fictReal} salva no sistema central com data, executor, materiais e memória de cálculo — pronta pra casar com o almoxarifado e virar medição. Bora pra próxima?`);
       areaRef.current = '';
+      sugRef.current = null;
+      setSugArea(null);
       setDados({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
       setFotos([]);
       const prox = fictReal ? fictReal + 1 : proxFict;
@@ -459,7 +482,14 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
 
         {etapa === 'area' && (
           <div className="flex flex-wrap gap-2 justify-center pt-2">
-            {AREAS.map(a => (
+            {sugArea && (
+              <button
+                onClick={() => { eu(`✔ ${sugArea.emoji} ${sugArea.nome}`); escolherArea(sugArea.nome, sugArea.emoji); }}
+                className="w-full bg-fpv-500 text-white font-bold text-sm px-5 py-3.5 rounded-full shadow-sm">
+                ✔ Confirmar {sugArea.emoji} {sugArea.nome}
+              </button>
+            )}
+            {AREAS.filter(a => a.nome !== sugArea?.nome).map(a => (
               <button key={a.nome}
                 onClick={() => { eu(`${a.emoji} ${a.nome}`); escolherArea(a.nome, a.emoji); }}
                 className="bg-white border border-fpv-100 text-fpv-700 font-bold text-xs px-3.5 py-2.5 rounded-full shadow-sm">
