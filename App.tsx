@@ -3,6 +3,7 @@ import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, Refres
 import { supabase } from './services/supabaseClient';
 import { osService } from './services/osService';
 import { OSCampo, EXECUTOR_OPTIONS } from './types';
+import { VOZ_ATIVA, GESTORES, ALMOX, EQUIPES } from './config';
 import LoginScreen from './components/LoginScreen';
 import ChatOS from './components/ChatOS';
 import NovaOS from './components/NovaOS';
@@ -12,15 +13,10 @@ import AlmoxOS from './components/AlmoxOS';
 import Gestao from './components/Gestao';
 
 type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento';
-const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v16';
-
-// quem enxerga a aba Almoxarifado (equipes de emergência só RETIRAM —
-// o lançamento é do almoxarife; gestão acompanha)
-const ALMOX = ['joao'];
+const VERSAO = 'v17';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -29,7 +25,7 @@ const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-�
 const App: React.FC = () => {
   const [sessao, setSessao] = useState<any>(null);
   const [carregandoSessao, setCarregandoSessao] = useState(true);
-  const [aba, setAba] = useState<Aba>('chat');
+  const [aba, setAba] = useState<Aba>(VOZ_ATIVA ? 'chat' : 'nova');
   const [lista, setLista] = useState<OSCampo[]>([]);
   const [editando, setEditando] = useState<OSCampo | null>(null);
   const [erroLista, setErroLista] = useState('');
@@ -53,9 +49,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!sessao) { jaDirecionou.current = false; return; }
     const u = sessao.user?.email?.split('@')[0];
-    if (u && GESTORES.includes(u) && !jaDirecionou.current) {
-      jaDirecionou.current = true;
-      setAba('gestao');
+    if (u && !jaDirecionou.current) {
+      if (GESTORES.includes(u)) { jaDirecionou.current = true; setAba('gestao'); }
+      else if (ALMOX.includes(u)) { jaDirecionou.current = true; setAba('almox'); }
     }
   }, [sessao]);
 
@@ -71,10 +67,16 @@ const App: React.FC = () => {
   if (!sessao) return <LoginScreen />;
 
   const usuario = sessao.user?.email?.split('@')[0] || 'usuário';
-  const meuNome = GESTORES.includes(usuario)
-    ? undefined
-    : EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
-  const veAlmox = ALMOX.includes(usuario) || GESTORES.includes(usuario);
+  const ehGestor = GESTORES.includes(usuario);
+  // João: SÓ o Almoxarifado — é o dashboard dele, sem O.S./fechamento
+  const soAlmox = ALMOX.includes(usuario) && !ehGestor;
+  const veAlmox = ALMOX.includes(usuario) || ehGestor;
+  const equipe = EQUIPES[usuario];
+  // "responsabilidade do autor do painel": encarregado vê as SUAS;
+  // login de equipe (emergencia1/2) vê as O.S. dos MEMBROS da equipe
+  const meusNomes = ehGestor ? undefined
+    : equipe ? equipe.membros
+    : (() => { const n = EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario)); return n ? [n] : undefined; })();
 
   const trocarSenha = async () => {
     if (novaSenha.length < 6) { setSenhaMsg('A senha precisa de pelo menos 6 caracteres.'); return; }
@@ -143,21 +145,23 @@ const App: React.FC = () => {
       )}
 
       <main className="max-w-3xl mx-auto p-4">
-        {aba === 'chat' && <ChatOS aoSalvar={recarregar} />}
-        {aba === 'nova' && (
+        {VOZ_ATIVA && aba === 'chat' && !soAlmox && <ChatOS aoSalvar={recarregar} />}
+        {aba === 'nova' && !soAlmox && (
           <NovaOS
             editando={editando}
+            usuario={usuario}
             aoSalvar={() => { setEditando(null); recarregar(); }}
             aoCancelarEdicao={() => setEditando(null)}
           />
         )}
-        {aba === 'lista' && (
+        {aba === 'lista' && !soAlmox && (
           <ListaOS
             lista={lista}
             aoEditar={(os) => { setEditando(os); setAba('nova'); }}
             aoMudar={recarregar}
-            meuNome={meuNome}
-            podeExcluir={GESTORES.includes(usuario)}
+            meusNomes={meusNomes}
+            restrito={!ehGestor && !!meusNomes}
+            podeExcluir={ehGestor}
           />
         )}
         {aba === 'almox' && veAlmox && <AlmoxOS listaOS={lista} />}
@@ -170,17 +174,17 @@ const App: React.FC = () => {
             aoVerLista={() => setAba('lista')}
           />
         )}
-        {aba === 'fechamento' && <FechamentoSemanal lista={lista} />}
+        {aba === 'fechamento' && !soAlmox && <FechamentoSemanal lista={lista} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-stone-200 px-4 py-2 print-hidden">
         <div className="max-w-3xl mx-auto flex gap-1">
-          <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />
-          <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />
-          <TabBtn id="lista" icon={ListChecks} label={`O.S. (${lista.length})`} />
+          {VOZ_ATIVA && !soAlmox && <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />}
+          {!soAlmox && <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />}
+          {!soAlmox && <TabBtn id="lista" icon={ListChecks} label={meusNomes ? 'Minhas O.S.' : `O.S. (${lista.length})`} />}
           {veAlmox && <TabBtn id="almox" icon={Package} label="Almox" />}
-          {GESTORES.includes(usuario) && <TabBtn id="gestao" icon={LayoutDashboard} label="Gestão" />}
-          <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />
+          {ehGestor && <TabBtn id="gestao" icon={LayoutDashboard} label="Gestão" />}
+          {!soAlmox && <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />}
         </div>
       </nav>
     </div>

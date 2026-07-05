@@ -23,6 +23,6 @@ export interface OSCampo {
 
 export const STATUS_OPTIONS = ['Pendente', 'Executando', 'Concluído', 'Assinatura', 'Material', 'Cancelada'];
 export const FISCAL_OPTIONS = ['Wellington', 'Renato', 'Central'];
-export const CLASSIF_OPTIONS = ['Emergencial', 'Urgente', 'Normal', 'I', 'II', 'III'];
-export const EXECUTOR_OPTIONS = ['Gilson', 'Leandro', 'Miqueias', 'Carlos Alberto', 'Edison', 'Emiliano', 'Matheus', 'Geilton', 'Nicolas', 'Serviço Externo'];
-export const MED_OPTIONS = ['', 'MED 7', 'MED 8'];
+export const CLASSIF_OPTIONS = ['Emergencial', 'Urgente', 'Normal'];
+export const EXECUTOR_OPTIONS = ['Gilson', 'Leandro', 'Miqueias', 'Carlos Alberto', 'Caleb', 'Patrick', 'Edison', 'Emiliano', 'Matheus', 'Geilton', 'Nicolas', 'Serviço Externo'];
+export const MED_OPTIONS = ['', 'MED 7', 'MED 8', 'MED 9', 'MED 10', 'MED 11', 'MED 12'];

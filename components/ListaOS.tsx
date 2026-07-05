@@ -7,9 +7,20 @@ interface Props {
   lista: OSCampo[];
   aoEditar: (os: OSCampo) => void;
   aoMudar: () => void;
-  meuNome?: string; // encarregado logado → habilita "Minhas O.S." com alerta de prazo
+  meusNomes?: string[]; // executores do login (encarregado ou membros da equipe)
+  restrito?: boolean;   // campo vê SÓ as suas (decisão Renan 05/07) — sem "Todas"
   podeExcluir?: boolean; // AUDITORIA: excluir O.S. (dado de medição!) só gestão
 }
+
+// filtro de status pedido pelo Renan: pendente · executando ·
+// pendente assinatura · concluídas (rótulo ≠ valor do banco)
+const FILTROS_STATUS: { rotulo: string; casa: (os: OSCampo) => boolean }[] = [
+  { rotulo: 'Todas', casa: () => true },
+  { rotulo: 'Pendente', casa: os => os.status === 'Pendente' || os.status === 'Material' },
+  { rotulo: 'Executando', casa: os => os.status === 'Executando' },
+  { rotulo: 'Pend. assinatura', casa: os => os.status === 'Assinatura' },
+  { rotulo: 'Concluídas', casa: os => os.status === 'Concluído' },
+];
 
 const pillCor = (status: string) => {
   if (status === 'Concluído') return 'bg-fpv-50 text-fpv-700 border-fpv-100';
@@ -38,19 +49,24 @@ const alertaPrazo = (os: OSCampo) => {
   return null;
 };
 
-const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome, podeExcluir = false }) => {
+const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meusNomes, restrito = false, podeExcluir = false }) => {
   const [busca, setBusca] = useState('');
-  const [soMinhas, setSoMinhas] = useState(!!meuNome);
+  const [soMinhas, setSoMinhas] = useState(!!meusNomes);
+  const [filtro, setFiltro] = useState('Todas');
   const [mostrar, setMostrar] = useState(100); // com a planilha importada são ~1.800 O.S.
 
-  const minhas = meuNome ? lista.filter(os => os.executor === meuNome && os.status !== 'Cancelada') : [];
-  const base = meuNome && soMinhas ? minhas : lista;
+  const minhas = meusNomes ? lista.filter(os => meusNomes.includes(os.executor) && os.status !== 'Cancelada') : [];
+  const base = meusNomes && (soMinhas || restrito) ? minhas : lista;
+
+  const casaFiltro = FILTROS_STATUS.find(f => f.rotulo === filtro)?.casa ?? (() => true);
 
   const filtradas = base.filter(os =>
-    !busca ||
-    String(os.numero ?? '').includes(busca) ||
-    os.unidade.toLowerCase().includes(busca.toLowerCase()) ||
-    (os.executor || '').toLowerCase().includes(busca.toLowerCase())
+    casaFiltro(os) && (
+      !busca ||
+      String(os.numero ?? '').includes(busca) ||
+      os.unidade.toLowerCase().includes(busca.toLowerCase()) ||
+      (os.executor || '').toLowerCase().includes(busca.toLowerCase())
+    )
   );
 
   const abertas = minhas.filter(os => !['Concluído', 'Cancelada'].includes(os.status));
@@ -73,7 +89,8 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome, podeExclu
     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
       <div className="flex items-center gap-3 mb-3">
         <h2 className="font-bold text-stone-900 flex-1">
-          {meuNome && soMinhas ? <>Minhas O.S. <span className="text-stone-400 font-medium">({minhas.length})</span></>
+          {meusNomes && (soMinhas || restrito)
+            ? <>Minhas O.S. <span className="text-stone-400 font-medium">({minhas.length})</span></>
             : <>O.S. no banco central <span className="text-stone-400 font-medium">({lista.length})</span></>}
         </h2>
         <div className="relative">
@@ -83,8 +100,8 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome, podeExclu
         </div>
       </div>
 
-      {meuNome && (
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
+      {meusNomes && !restrito && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <button onClick={() => setSoMinhas(true)}
             className={`rounded-full border px-3 py-1.5 text-xs font-bold ${soMinhas ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-600 border-stone-200'}`}>
             Minhas ({minhas.length})
@@ -93,19 +110,35 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meuNome, podeExclu
             className={`rounded-full border px-3 py-1.5 text-xs font-bold ${!soMinhas ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-600 border-stone-200'}`}>
             Todas ({lista.length})
           </button>
-          {soMinhas && abertas.length > 0 && (
-            <span className="text-[11px] text-stone-500 w-full sm:w-auto">
-              {abertas.length} aberta{abertas.length !== 1 ? 's' : ''}
-              {semFoto > 0 && <span className="text-amber-700 font-bold"> · {semFoto} sem foto</span>}
-              {semMem > 0 && <span className="text-amber-700 font-bold"> · {semMem} sem memória</span>}
-            </span>
-          )}
         </div>
+      )}
+
+      {/* filtro por status — conta de cada balde já no botão */}
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+        {FILTROS_STATUS.map(f => {
+          const n = f.rotulo === 'Todas' ? base.length : base.filter(f.casa).length;
+          return (
+            <button key={f.rotulo} onClick={() => setFiltro(f.rotulo)}
+              className={`rounded-full border px-3 py-1.5 text-[11px] font-bold ${filtro === f.rotulo ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200'}`}>
+              {f.rotulo} <span className="opacity-60">({n})</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {meusNomes && abertas.length > 0 && (
+        <p className="text-[11px] text-stone-500 mb-3">
+          {abertas.length} aberta{abertas.length !== 1 ? 's' : ''}
+          {semFoto > 0 && <span className="text-amber-700 font-bold"> · {semFoto} sem foto</span>}
+          {semMem > 0 && <span className="text-amber-700 font-bold"> · {semMem} sem memória</span>}
+        </p>
       )}
 
       {filtradas.length === 0 && (
         <p className="text-sm text-stone-400 text-center py-8">
-          {meuNome && soMinhas ? 'Nenhuma O.S. no seu nome ainda. Registre pelo Chat 💪' : 'Nenhuma O.S. ainda. Registre a primeira na aba "Nova O.S." 💪'}
+          {filtro !== 'Todas' ? `Nenhuma O.S. em "${filtro}".`
+            : meusNomes ? 'Nenhuma O.S. no seu nome ainda. Registre pelo Formulário 💪'
+            : 'Nenhuma O.S. ainda. Registre a primeira no Formulário 💪'}
         </p>
       )}
 

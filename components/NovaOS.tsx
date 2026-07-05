@@ -1,24 +1,49 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Save, Mic, Camera, X, Loader2, Eraser, Siren } from 'lucide-react';
+import { Save, Mic, Camera, X, Loader2, Eraser, Siren, PackageMinus, Plus, Minus } from 'lucide-react';
 import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS } from '../types';
 import { ESCOLAS } from '../data/escolas';
+import { KIT_EMERGENCIAL } from '../data/materiais';
+import { guiaMedida } from '../data/areas';
+import { VOZ_ATIVA, GESTORES, EQUIPES, medDoMes } from '../config';
 import { osService } from '../services/osService';
 
-const VAZIA: OSCampo = {
-  numero: null, emergencial: false, unidade: '', fiscal: 'Wellington', classificacao: 'Normal',
-  entrada: new Date().toISOString().slice(0, 10), conclusao: null, executor: '', status: 'Executando',
-  medicao: '', solicitado: '', servico: '', materiais: '', memoria_calculo: '', foto_urls: []
+const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
+
+// defaults por login (spec Nicolas): equipe de emergência já entra com
+// fiscal da zona + EMERGENCIAL ligado; encarregado corretivo já entra
+// como executor — "responsável preenchido automaticamente com o login"
+const vaziaPara = (usuario: string): OSCampo => {
+  const equipe = EQUIPES[usuario];
+  const executorLogado = EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
+  return {
+    numero: null,
+    emergencial: !!equipe,
+    unidade: '',
+    fiscal: equipe?.fiscal ?? 'Wellington',
+    classificacao: equipe ? 'Emergencial' : 'Normal',
+    entrada: new Date().toISOString().slice(0, 10),
+    conclusao: null,
+    executor: executorLogado ?? '',
+    status: 'Executando',
+    medicao: '', solicitado: '', servico: '', materiais: '', memoria_calculo: '', foto_urls: []
+  };
 };
 
 interface Props {
   editando: OSCampo | null;
+  usuario: string;
   aoSalvar: () => void;
   aoCancelarEdicao: () => void;
 }
 
-const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
-  const [os, setOs] = useState<OSCampo>({ ...VAZIA });
+const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao }) => {
+  const equipe = EQUIPES[usuario];
+  const ehGestor = GESTORES.includes(usuario);
+  const [os, setOs] = useState<OSCampo>(() => vaziaPara(usuario));
   const [fotos, setFotos] = useState<File[]>([]);
+  const [kit, setKit] = useState<Record<string, number>>({}); // descricao → qtd usada
+  const [kitAberto, setKitAberto] = useState(false);
+  const [baixaAuto, setBaixaAuto] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState('');
   const [ouvindo, setOuvindo] = useState(false);
@@ -30,6 +55,7 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
   }, [editando]);
 
   useEffect(() => {
+    if (!VOZ_ATIVA) return; // voz desligada nesta semana — formulário é digitado
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SR) {
       recRef.current = new SR();
@@ -53,11 +79,27 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
 
   const campo = (k: keyof OSCampo, v: any) => setOs(prev => ({ ...prev, [k]: v }));
 
-  const limpar = () => { setOs({ ...VAZIA }); setFotos([]); setMsg(''); aoCancelarEdicao(); };
+  const limpar = () => { setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); aoCancelarEdicao(); };
+
+  const mudaKit = (descricao: string, delta: number) =>
+    setKit(prev => {
+      const q = Math.max(0, (prev[descricao] || 0) + delta);
+      const novo = { ...prev };
+      if (q === 0) delete novo[descricao]; else novo[descricao] = q;
+      return novo;
+    });
+
+  const itensKit = KIT_EMERGENCIAL
+    .filter(i => kit[i.descricao] > 0)
+    .map(i => ({ descricao: i.descricao, quantidade: kit[i.descricao], unidade: i.unidade }));
+
+  // guia de medida específico pelo texto do serviço (fórmula EMOP certa)
+  const guia = guiaMedida(`${os.servico} ${os.solicitado || ''}`.trim(), os.area);
 
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!os.unidade.trim()) { setMsg('Informe a unidade (escola).'); return; }
+    if (equipe && !os.executor) { setMsg('Toque em QUEM EXECUTOU (botões da equipe).'); return; }
     setSalvando(true);
     setMsg('');
 
@@ -70,17 +112,36 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
     }
     const urls = [...os.foto_urls, ...novas];
 
-    const resultado = await osService.salvar({ ...os, foto_urls: urls, numero: os.numero ? Number(os.numero) : null });
+    // itens do kit entram por escrito nos materiais da O.S. (rastro na própria O.S.)
+    const textoKit = itensKit.map(i => `${i.quantidade} ${i.unidade} ${i.descricao}`).join(' + ');
+    const materiais = [os.materiais.trim(), textoKit ? `[KIT] ${textoKit}` : ''].filter(Boolean).join('\n');
+
+    const resultado = await osService.salvar({ ...os, materiais, foto_urls: urls, numero: os.numero ? Number(os.numero) : null });
     setSalvando(false);
-    if (resultado.ok) {
-      setMsg((os.id ? 'O.S. atualizada ✔' : 'O.S. registrada no banco central ✔') + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : ''));
-      setOs({ ...VAZIA });
-      setFotos([]);
-      aoSalvar();
-    } else {
-      setMsg('Erro ao salvar: ' + (resultado.erro || 'verifique a conexão'));
+    if (!resultado.ok) { setMsg('Erro ao salvar: ' + (resultado.erro || 'verifique a conexão')); return; }
+
+    // baixa automática do kit no estoque, amarrada ao nº que o banco devolveu
+    let msgKit = '';
+    if (!os.id && itensKit.length > 0 && baixaAuto) {
+      const salva = resultado.os;
+      const ref = salva?.numero ? String(salva.numero) : (salva?.numero_fict ? `F-${salva.numero_fict}` : '');
+      const falhasKit = await osService.baixaKit(itensKit, ref, os.unidade);
+      msgKit = falhasKit > 0
+        ? ` ⚠️ ${falhasKit} item(ns) do kit NÃO baixaram no estoque — avise o João.`
+        : ` 📦 ${itensKit.length} item(ns) do kit baixados no estoque${ref ? ' → O.S. ' + ref : ''}.`;
     }
+
+    setMsg((os.id ? 'O.S. atualizada ✔' : 'O.S. registrada no banco central ✔') + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : '') + msgKit);
+    setOs(vaziaPara(usuario));
+    setFotos([]);
+    setKit({});
+    setKitAberto(false);
+    aoSalvar();
   };
+
+  // classificação legada (I/II/III da planilha importada) continua visível na edição
+  const classifs = os.classificacao && !CLASSIF_OPTIONS.includes(os.classificacao)
+    ? [...CLASSIF_OPTIONS, os.classificacao] : CLASSIF_OPTIONS;
 
   return (
     <form onSubmit={salvar} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
@@ -92,15 +153,21 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
         </label>
       </div>
 
+      {equipe && !os.id && (
+        <p className="text-[11px] text-stone-500 -mt-2">
+          Equipe {equipe.fiscal} · fiscal já preenchido · sem nº? o sistema gera o F-nº na hora · medição vigente: <b>{medDoMes()}</b> (automática no fechamento)
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Nº da O.S.</label>
           <input type="number" value={os.numero ?? ''} onChange={e => campo('numero', e.target.value ? Number(e.target.value) : null)}
-            placeholder="vazio = sem nº ainda"
+            placeholder="vazio = gera F-nº"
             className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         </div>
         <div>
-          <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Entrada</label>
+          <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Data (edite se retroativo)</label>
           <input type="date" value={os.entrada ?? ''} onChange={e => campo('entrada', e.target.value || null)}
             className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         </div>
@@ -114,6 +181,21 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
         <datalist id="escolas">{ESCOLAS.map(e => <option key={e} value={e} />)}</datalist>
       </div>
 
+      {/* executor em 1 toque: membros da equipe do login */}
+      {equipe && (
+        <div>
+          <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Quem executou (equipe)</label>
+          <div className="flex gap-2 flex-wrap">
+            {equipe.membros.map(m => (
+              <button key={m} type="button" onClick={() => campo('executor', m)}
+                className={`rounded-full border px-3.5 py-2 text-xs font-bold ${os.executor === m ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-600 border-stone-200'}`}>
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Fiscal</label>
@@ -126,15 +208,17 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
           <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Classificação</label>
           <select value={os.classificacao} onChange={e => campo('classificacao', e.target.value)}
             className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500">
-            {CLASSIF_OPTIONS.map(c => <option key={c}>{c}</option>)}
+            {classifs.map(c => <option key={c}>{c}</option>)}
           </select>
         </div>
-        <div>
-          <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Executor</label>
-          <input list="executores" value={os.executor} onChange={e => campo('executor', e.target.value)}
-            className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
-          <datalist id="executores">{EXECUTOR_OPTIONS.map(x => <option key={x} value={x} />)}</datalist>
-        </div>
+        {!equipe && (
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Executor</label>
+            <input list="executores" value={os.executor} onChange={e => campo('executor', e.target.value)}
+              className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
+            <datalist id="executores">{EXECUTOR_OPTIONS.map(x => <option key={x} value={x} />)}</datalist>
+          </div>
+        )}
         <div>
           <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Status</label>
           <select value={os.status} onChange={e => campo('status', e.target.value)}
@@ -147,13 +231,18 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
           <input type="date" value={os.conclusao ?? ''} onChange={e => campo('conclusao', e.target.value || null)}
             className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         </div>
-        <div>
-          <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Medição</label>
-          <select value={os.medicao} onChange={e => campo('medicao', e.target.value)}
-            className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500">
-            {MED_OPTIONS.map(m => <option key={m} value={m}>{m || '—'}</option>)}
-          </select>
-        </div>
+        {/* medição SAIU do painel do campo (decisão Renan 05/07): entra
+            automática no fechamento — MED do mês vigente. Gestão ainda edita. */}
+        {ehGestor && (
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Medição</label>
+            <select value={os.medicao} onChange={e => campo('medicao', e.target.value)}
+              className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500">
+              {(os.medicao && !MED_OPTIONS.includes(os.medicao) ? [...MED_OPTIONS, os.medicao] : MED_OPTIONS)
+                .map(m => <option key={m} value={m}>{m || '—'}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       <div>
@@ -177,16 +266,49 @@ const NovaOS: React.FC<Props> = ({ editando, aoSalvar, aoCancelarEdicao }) => {
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 resize-y" />
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-[11px] font-bold uppercase text-stone-500">Memória de cálculo (medidas do campo)</label>
-          <button type="button" onClick={ditar}
-            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${ouvindo ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-fpv-50 text-fpv-700 border-fpv-100 hover:bg-fpv-100'}`}>
-            <Mic size={13} /> {ouvindo ? 'Ouvindo… toque p/ parar' : 'Ditar por voz'}
+      {/* KIT EMERGENCIAL (spec Nicolas): lista padrão, baixa automática no estoque */}
+      {!os.id && (equipe || os.emergencial) && (
+        <div className="border border-red-100 bg-red-50/40 rounded-xl p-3">
+          <button type="button" onClick={() => setKitAberto(a => !a)}
+            className="w-full flex items-center gap-2 text-sm font-bold text-red-700">
+            <PackageMinus size={16} /> Kit emergencial
+            {itensKit.length > 0 && <span className="text-[11px] bg-red-600 text-white rounded-full px-2 py-0.5">{itensKit.length}</span>}
+            <span className="ml-auto text-stone-400 font-medium text-xs">{kitAberto ? 'fechar ▲' : 'usar itens do kit ▼'}</span>
           </button>
+          {kitAberto && (
+            <div className="mt-3 space-y-1.5">
+              {KIT_EMERGENCIAL.map(i => (
+                <div key={i.descricao} className="flex items-center gap-2 text-sm bg-white border border-stone-100 rounded-lg px-3 py-1.5">
+                  <span className="flex-1 min-w-0 truncate text-stone-700">{i.descricao}</span>
+                  <span className="text-[10px] text-stone-400">{i.unidade}</span>
+                  <button type="button" onClick={() => mudaKit(i.descricao, -1)} className="p-1 text-stone-400 hover:text-red-600"><Minus size={14} /></button>
+                  <span className={`w-7 text-center font-bold tabular-nums ${kit[i.descricao] ? 'text-red-700' : 'text-stone-300'}`}>{kit[i.descricao] || 0}</span>
+                  <button type="button" onClick={() => mudaKit(i.descricao, +1)} className="p-1 text-stone-400 hover:text-fpv-600"><Plus size={14} /></button>
+                </div>
+              ))}
+              <label className="flex items-center gap-2 text-xs font-bold text-stone-600 pt-1 cursor-pointer">
+                <input type="checkbox" checked={baixaAuto} onChange={e => setBaixaAuto(e.target.checked)} />
+                dar baixa automática no estoque ao salvar
+              </label>
+            </div>
+          )}
         </div>
+      )}
+
+      <div>
+        <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Memória de cálculo (medidas do campo)
+          {VOZ_ATIVA && (
+            <button type="button" onClick={ditar}
+              className={`float-right flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${ouvindo ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-fpv-50 text-fpv-700 border-fpv-100 hover:bg-fpv-100'}`}>
+              <Mic size={13} /> {ouvindo ? 'Ouvindo… toque p/ parar' : 'Ditar por voz'}
+            </button>
+          )}
+        </label>
+        {(os.servico || os.solicitado) && (
+          <p className="text-[11px] text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-lg px-2.5 py-1.5 mb-1.5">📐 {guia}</p>
+        )}
         <textarea value={os.memoria_calculo} onChange={e => campo('memoria_calculo', e.target.value)} rows={3}
-          placeholder="ex.: parede 3,85 × 1,20 = 4,62 m² · rodapé 7 m lineares · 2 und porta 0,80 — é isto que vira R$ na EMOP"
+          placeholder="ex.: parede 3,85 × 1,20 = 4,62 m² · rodapé 7 m lineares · 2 und porta 0,80"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 resize-y" />
       </div>
 

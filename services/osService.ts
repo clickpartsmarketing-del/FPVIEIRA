@@ -86,6 +86,20 @@ export const osService = {
     return Math.max((data[0] as any).numero_fict + 1, INICIO_FICT);
   },
 
+  // KIT EMERGENCIAL: baixa automática no estoque — cada item usado vira
+  // uma linha de saida_material amarrada à O.S. (origem KIT EMERGENCIAL),
+  // exatamente como se o João tivesse lançado. Devolve quantas falharam.
+  async baixaKit(itens: { descricao: string; quantidade: number; unidade: string }[], osRef: string, escola: string): Promise<number> {
+    if (!itens.length) return 0;
+    const hoje = new Date().toISOString().slice(0, 10);
+    const linhas = itens.map(i => ({
+      data: hoje, descricao: i.descricao, quantidade: i.quantidade,
+      unidade: i.unidade, os_ref: osRef || null, escola, origem: 'KIT EMERGENCIAL'
+    }));
+    const { error } = await supabase.from('saida_material').insert(linhas);
+    return error ? itens.length : 0;
+  },
+
   async uploadFoto(file: File): Promise<string | null> {
     try {
       const ext = file.name.split('.').pop() || 'jpg';

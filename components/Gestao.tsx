@@ -48,11 +48,11 @@ export const selosDaOS = (os: OSCampo) => {
   return { concluida, memoria, foto, numero, assinatura, contagem };
 };
 
-// MED 7 = julho/2026 (medição mensal): avança sozinha na virada do mês,
-// e o maior nº já lançado à mão serve de piso
+// MED 8 = julho/2026 (a 7ª fechou em junho — âncora confirmada pelo Renan
+// 05/07): avança sozinha na virada do mês; maior nº já lançado é o piso
 const medAtual = (lista: OSCampo[]) => {
   const agora = new Date();
-  const porCalendario = 7 + (agora.getFullYear() - 2026) * 12 + (agora.getMonth() - 6);
+  const porCalendario = 8 + (agora.getFullYear() - 2026) * 12 + (agora.getMonth() - 6);
   const nums = lista
     .map(o => parseInt((o.medicao || '').replace(/\D/g, ''), 10))
     .filter(n => !isNaN(n));

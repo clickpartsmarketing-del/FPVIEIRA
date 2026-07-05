@@ -51,4 +51,31 @@ export const MATERIAIS = [
 
 export const UNIDADES = ["UND", "M", "M²", "M³", "KG", "L", "CX", "PCT", "SC", "RL", "JOGO", "PAR"];
 
+// KIT EMERGENCIAL (spec Nicolas 05/07): a listagem padrão que a equipe
+// de emergência carrega — no formulário, cada item usado dá baixa no
+// estoque automaticamente, amarrado à O.S. (origem KIT EMERGENCIAL)
+export interface ItemKit { descricao: string; unidade: string; }
+export const KIT_EMERGENCIAL: ItemKit[] = [
+  { descricao: "CIMENTO CP III RS 32 50KG", unidade: "SC" },
+  { descricao: "AREIA SACO", unidade: "SC" },
+  { descricao: "SIFÃO", unidade: "UND" },
+  { descricao: "ENGATE FLEXÍVEL", unidade: "UND" },
+  { descricao: "TORNEIRA DE LAVATÓRIO", unidade: "UND" },
+  { descricao: "REPARO CAIXA ACOPLADA", unidade: "UND" },
+  { descricao: "FITA TEFLON 18MM", unidade: "UND" },
+  { descricao: "COLA PVC 175G", unidade: "UND" },
+  { descricao: "TUBO 25 SOLDÁVEL (M)", unidade: "M" },
+  { descricao: "JOELHO 25X90", unidade: "UND" },
+  { descricao: "LUVA 25", unidade: "UND" },
+  { descricao: "REGISTRO 25 SOLDÁVEL", unidade: "UND" },
+  { descricao: "LÂMPADA TUBULAR 18W", unidade: "UND" },
+  { descricao: "DISJUNTOR MONO 20A", unidade: "UND" },
+  { descricao: "FIO FLEXÍVEL 2,5MM (M)", unidade: "M" },
+  { descricao: "TOMADA SIMPLES 20A", unidade: "UND" },
+  { descricao: "INTERRUPTOR 1 SEÇÃO", unidade: "UND" },
+  { descricao: "FITA ISOLANTE 20M", unidade: "UND" },
+  { descricao: "PARAFUSO 8MM + BUCHA", unidade: "UND" },
+  { descricao: "SILICONE TUBO", unidade: "UND" },
+];
+
 export const ORIGENS = ["ALMOXARIFADO", "DEPÓSITO CAMPISTA", "HIDRO LUZ", "AXXONAL", "NOVAL PISOS E TINTAS", "OUTRO"];
