@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { OSCampo } from '../types';
 import { osService } from '../services/osService';
-import { AREAS, areaDaOS, Area } from '../data/areas';
+import { AREAS, areaDaOS, Area, guiaMedida } from '../data/areas';
 
 // =====================================================================
 // Aba GESTÃO — 3 telas sob medida:
@@ -649,7 +649,7 @@ const TelaEngenheiro: React.FC<Props> = ({ lista, aoEditar, aoMudar }) => {
         {memEditId === o.id ? (
           <div className="mb-2 border border-fpv-100 rounded-xl p-2.5 bg-fpv-50/40">
             <p className="text-[11px] text-fpv-700 font-medium mb-1.5 leading-snug">
-              📐 <b>{ar.emoji} {ar.nome}</b> — {ar.guiaMemoria}
+              📐 <b>{ar.emoji} {ar.nome}</b> — {guiaMedida(`${o.servico || ''} ${o.solicitado || ''}`, ar.nome)}
             </p>
             <textarea
               ref={memRef}

@@ -16,7 +16,7 @@ const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v14';
+const VERSAO = 'v15';
 
 // quem enxerga a aba Almoxarifado (equipes de emergência só RETIRAM —
 // o lançamento é do almoxarife; gestão acompanha)

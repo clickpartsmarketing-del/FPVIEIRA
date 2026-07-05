@@ -3,7 +3,7 @@ import { Mic, Send, Camera, Check, RotateCcw, Volume2, VolumeX, Loader2, Siren, 
 import { osService } from '../services/osService';
 import { supabase } from '../services/supabaseClient';
 import { ESCOLAS } from '../data/escolas';
-import { AREAS, areaDoTexto } from '../data/areas';
+import { AREAS, areaDoTexto, guiaMedida } from '../data/areas';
 
 // ============================================================
 // CHAT O.S. — engenharia reversa da planilha de medição:
@@ -13,7 +13,9 @@ import { AREAS, areaDoTexto } from '../data/areas';
 // ============================================================
 
 interface Msg { de: 'bot' | 'eu'; texto: string; }
-type Etapa = 'escola' | 'area' | 'solicitado' | 'executado' | 'materiais' | 'medidas' | 'conclusao' | 'foto' | 'confirma';
+type Etapa = 'escola' | 'area' | 'fiscal' | 'solicitado' | 'executado' | 'materiais' | 'medidas' | 'conclusao' | 'foto' | 'confirma';
+
+const FISCAIS = ['Wellington', 'Renato', 'Central'];
 
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -44,7 +46,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const [salvando, setSalvando] = useState(false);
   const [proxFict, setProxFict] = useState<number | null>(null);
   const [executor, setExecutor] = useState('');
-  const [dados, setDados] = useState({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null as string | null, status: 'Executando' });
+  const [dados, setDados] = useState({ unidade: '', area: '', fiscal: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null as string | null, status: 'Executando' });
   const [sugArea, setSugArea] = useState<{ nome: string; emoji: string } | null>(null);
   const [fotos, setFotos] = useState<File[]>([]);
 
@@ -53,6 +55,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const etapaRef = useRef<Etapa>('escola');
   const areaRef = useRef('');        // espelho da área p/ o callback de voz (closure!)
   const sugRef = useRef<{ nome: string; emoji: string } | null>(null); // área sugerida pelo pedido
+  const textoServRef = useRef('');   // pedido+executado acumulados p/ o guia de medida por serviço
   const tentativaRef = useRef(0);
   const recRef = useRef<any>(null);
   const bufferRef = useRef('');      // acumula a fala enquanto o dedo segura
@@ -77,6 +80,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const PERGUNTA: Record<string, string> = {
     escola: 'Em QUAL ESCOLA você está?',
     area: '🛠️ Qual a ÁREA? Elétrica, hidráulica, pintura… ou toca num botão. 👇',
+    fiscal: '👷 Qual FISCAL pediu? Toca aí embaixo. 👇',
     solicitado: 'O QUE O FISCAL PEDIU? (a demanda que chegou pra você)',
     executado: '🔨 O que VOCÊ FEZ de verdade aí? (o serviço executado)',
     materiais: '🔩 Quais MATERIAIS gastou? Quantidade + item (ex.: 2 assentos, 1 sifão).',
@@ -84,8 +88,6 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     conclusao: 'O serviço JÁ TERMINOU? Toca num dos botões aí embaixo. 👇'
   };
 
-  const guiaDaArea = (nome: string) =>
-    (AREAS.find(a => a.nome === nome) || AREAS[AREAS.length - 1]).guiaMemoria;
 
   const falar = (t: string) => {
     if (mudoRef.current || !('speechSynthesis' in window)) return;
@@ -163,9 +165,10 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       setTranscrevendo(false);
       const texto = (data as any)?.texto?.trim();
       if (error) {
-        // servidor falhou de verdade → cai pro reconhecimento do navegador
+        // servidor falhou de verdade → mostra o ERRO REAL e cai pro navegador
         audioModoRef.current = false;
-        bot('⚠️ Falha na transcrição do servidor — voltei pro modo do navegador. Segura e fala de novo.');
+        const detalhe = (error as any)?.message || (error as any)?.name || 'erro desconhecido';
+        bot(`⚠️ Falha na transcrição do servidor [${String(detalhe).slice(0, 120)}]. Voltei pro modo do navegador — segura e fala de novo. (manda print desse erro pro engenheiro!)`);
         return;
       }
       if (!texto) {
@@ -216,7 +219,13 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     sugRef.current = null;
     setSugArea(null);
     setDados(d => ({ ...d, area: nome }));
-    bot(`${emoji} ${nome} anotada. ${PERGUNTA.executado}`);
+    bot(`${emoji} ${nome} anotada. ${PERGUNTA.fiscal}`);
+    mudarEtapa('fiscal');
+  };
+
+  const escolherFiscal = (f: string) => {
+    setDados(d => ({ ...d, fiscal: f }));
+    bot(`✔ Fiscal ${f}. ${PERGUNTA.executado}`);
     mudarEtapa('executado');
   };
 
@@ -243,6 +252,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
           const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
           chunksRef.current = [];
           if (!cancelRef.current && blob.size > 2000) transcreverAudio(blob, dur);
+          else if (!cancelRef.current) bot('🤏 Áudio curto demais — SEGURA o botão, fala a resposta inteira e só depois solta.');
           cancelRef.current = false;
         };
         mediaRef.current = mr;
@@ -326,6 +336,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         return;
       }
       setDados(d => ({ ...d, solicitado: d.solicitado ? d.solicitado + ' ' + texto : texto }));
+      textoServRef.current = (textoServRef.current + ' ' + texto).trim();
       // ÁREA autopreenchida pelo pedido: confirma com 1 toque (ou 1 "sim")
       const sug = areaDoTexto(texto);
       if (sug.nome !== 'Outros') {
@@ -353,6 +364,13 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       }
       escolherArea(a.nome, a.emoji);
 
+    } else if (et === 'fiscal') {
+      const f = /welling/i.test(texto) ? 'Wellington'
+        : /renato/i.test(texto) ? 'Renato'
+        : /central|prefeitura|semed|secretaria/i.test(texto) ? 'Central' : null;
+      if (f) { escolherFiscal(f); return; }
+      bot('Toca num dos botões: Wellington, Renato ou Central. 👇');
+
     } else if (et === 'executado') {
       if (texto.length < 5 && tentativaRef.current === 0) {
         tentativaRef.current++;
@@ -360,6 +378,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         return;
       }
       setDados(d => ({ ...d, executado: d.executado ? d.executado + ' ' + texto : texto }));
+      textoServRef.current = (textoServRef.current + ' ' + texto).trim();
       bot('🔩 Quais MATERIAIS gastou? Fala QUANTIDADE + item (ex.: DOIS assentos sanitários, UM sifão). Isso casa com a saída do almoxarifado no seu nome.');
       mudarEtapa('materiais');
 
@@ -371,7 +390,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
         return;
       }
       setDados(d => ({ ...d, materiais: d.materiais ? d.materiais + ' ' + texto : texto }));
-      bot(`📐 Agora a parte que vira DINHEIRO na medição — as MEDIDAS. ${guiaDaArea(areaRef.current)}`);
+      bot(`📐 Agora a parte que vira DINHEIRO na medição — as MEDIDAS. ${guiaMedida(textoServRef.current, areaRef.current)}`);
       mudarEtapa('medidas');
 
     } else if (et === 'medidas') {
@@ -426,8 +445,9 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
   const recomecar = () => {
     areaRef.current = '';
     sugRef.current = null;
+    textoServRef.current = '';
     setSugArea(null);
-    setDados({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
+    setDados({ unidade: '', area: '', fiscal: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
     setFotos([]); setMsgs([]);
     mudarEtapa('escola');
     bot(`Sem problema, do zero. O.S. F-${proxFict}, ${hojeBR()}. Em QUAL ESCOLA você está?`);
@@ -445,7 +465,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       numero_fict: null, // trigger do banco atribui — sequência única app + n8n
       emergencial: true,
       unidade: dados.unidade,
-      fiscal: 'Central',
+      fiscal: dados.fiscal || 'Central',
       classificacao: 'Emergencial',
       entrada: new Date().toISOString().slice(0, 10),
       conclusao: dados.conclusao,
@@ -465,8 +485,9 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       bot(`🚀 O.S. F-${fictReal} salva no sistema central com data, executor, materiais e memória de cálculo — pronta pra casar com o almoxarifado e virar medição. Bora pra próxima?`);
       areaRef.current = '';
       sugRef.current = null;
+      textoServRef.current = '';
       setSugArea(null);
-      setDados({ unidade: '', area: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
+      setDados({ unidade: '', area: '', fiscal: '', solicitado: '', executado: '', materiais: '', memoria: '', conclusao: null, status: 'Executando' });
       setFotos([]);
       const prox = fictReal ? fictReal + 1 : proxFict;
       setProxFict(prox);
@@ -521,6 +542,18 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
           </div>
         )}
 
+        {etapa === 'fiscal' && (
+          <div className="flex flex-wrap gap-2 justify-center pt-2">
+            {FISCAIS.map(f => (
+              <button key={f}
+                onClick={() => { eu(`👷 ${f}`); escolherFiscal(f); }}
+                className="bg-white border border-fpv-100 text-fpv-700 font-bold text-sm px-5 py-3 rounded-full shadow-sm">
+                👷 {f}
+              </button>
+            ))}
+          </div>
+        )}
+
         {etapa === 'conclusao' && (
           <div className="flex gap-2 justify-center pt-2">
             <button onClick={() => responderConclusao(true)} className="flex items-center gap-2 bg-fpv-500 text-white font-bold text-sm px-5 py-3.5 rounded-full shadow-sm">
@@ -563,7 +596,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
           <div className="bg-white rounded-2xl border-2 border-fpv-100 p-4 mt-2 text-sm space-y-1.5">
             <div className="font-bold text-fpv-700 mb-2">📋 Resumo — O.S. F-{proxFict} · {hojeBR()}</div>
             <div><b>Escola:</b> {dados.unidade || '—'}</div>
-            <div><b>Área:</b> {dados.area || '—'}</div>
+            <div><b>Área:</b> {dados.area || '—'} · <b>Fiscal:</b> {dados.fiscal || 'Central'}</div>
             <div><b>Fiscal pediu:</b> {dados.solicitado || '—'}</div>
             <div><b>Foi feito:</b> {dados.executado || '—'}</div>
             <div><b>Materiais:</b> {dados.materiais || '—'}</div>

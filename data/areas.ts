@@ -52,6 +52,41 @@ export const AREAS: Area[] = [
 
 const normalizar = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
+// =============================================================
+// SERVIÇOS MEDIDOS (pedido do Nicolas): a prévia do que entra na
+// medição por MEDIDA — tudo que não dá pra contabilizar só pela
+// saída de material. Cada serviço tem SUA fórmula/unidade EMOP.
+// =============================================================
+export interface ServicoMedido { nome: string; palavras: string[]; guia: string; }
+
+export const SERVICOS_MEDIDOS: ServicoMedido[] = [
+  { nome: 'Pintura', palavras: ['pintur', 'pintad', 'pintar', 'latex', 'grafiato', 'textura', 'caiac', 'esmalte'], guia: 'PINTURA: m² = largura × altura de CADA pano, nº de DEMÃOS e tipo de tinta (EMOP paga por m² por demão)' },
+  { nome: 'Escavação', palavras: ['escava', 'vala', 'cavou', 'cavar'], guia: 'ESCAVAÇÃO: m³ = comprimento × largura × PROFUNDIDADE (em metros)' },
+  { nome: 'Reaterro', palavras: ['reaterro', 'aterro', 'compacta'], guia: 'REATERRO: m³ = comprimento × largura × altura compactada' },
+  { nome: 'Concreto', palavras: ['concret', 'laje', 'sapata', 'contrapiso', 'calcada'], guia: 'CONCRETO/CONTRAPISO: comprimento × largura × ESPESSURA (m³ ou m²+esp.) e o traço se souber' },
+  { nome: 'Portão/Esquadria', palavras: ['portao', 'porta ', 'janela', 'grade', 'alambrado', 'basculante'], guia: 'PORTÃO/ESQUADRIA: UNIDADES + dimensões de cada um (largura × altura em m)' },
+  { nome: 'Alvenaria', palavras: ['alvenaria', 'parede', 'muro', 'bloco', 'tijolo'], guia: 'ALVENARIA: m² = comprimento × altura da parede + tipo/espessura do bloco' },
+  { nome: 'Emboço/Reboco', palavras: ['emboc', 'reboc', 'chapisc', 'massa unica'], guia: 'EMBOÇO/REBOCO: m² da superfície + espessura média (cm)' },
+  { nome: 'Piso/Revestimento', palavras: ['piso', 'ceramica', 'porcelanato', 'azulejo', 'revestiment'], guia: 'PISO/REVESTIMENTO: m² assentado = comprimento × largura de cada ambiente' },
+  { nome: 'Louças/Metais', palavras: ['vaso sanit', 'retirada de vaso', 'assento', 'pia ', 'torneira', 'mictorio', 'lavatorio', 'cuba'], guia: 'LOUÇAS/METAIS: UNIDADES — conta RETIRADA e INSTALAÇÃO como serviços separados' },
+  { nome: 'Calha/Rufo', palavras: ['calha', 'rufo', 'pingadeira'], guia: 'CALHA/RUFO: METROS LINEARES + largura da chapa se souber' },
+  { nome: 'Forro', palavras: ['forro', 'gesso', 'pvc'], guia: 'FORRO: m² = comprimento × largura do ambiente' },
+  { nome: 'Capina/Roçada', palavras: ['capina', 'rocada', 'limpeza de terreno', 'mato'], guia: 'CAPINA/ROÇADA: m² da área limpa (comprimento × largura)' },
+];
+
+// Guia de medida ESPECÍFICO pelo texto do serviço; cai pro guia da
+// área quando nenhum serviço medido é reconhecido.
+export const guiaMedida = (textoServico: string, areaNome?: string | null): string => {
+  const t = normalizar(textoServico);
+  const hits = SERVICOS_MEDIDOS.filter(s => s.palavras.some(p => t.includes(p)));
+  if (hits.length) return hits.slice(0, 2).map(h => h.guia).join(' · ');
+  if (areaNome) {
+    const a = AREAS.find(x => x.nome === areaNome);
+    if (a) return a.guiaMemoria;
+  }
+  return areaDoTexto(textoServico).guiaMemoria;
+};
+
 // Classifica uma O.S. pela área com mais palavras-chave casadas.
 // Vale tanto p/ O.S. novas (chat marca a área) quanto p/ as 1.800
 // importadas da planilha (classificadas pelo texto do serviço).
