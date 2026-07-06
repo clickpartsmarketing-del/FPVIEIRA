@@ -79,3 +79,16 @@ export const KIT_EMERGENCIAL: ItemKit[] = [
 ];
 
 export const ORIGENS = ["ALMOXARIFADO", "DEPÓSITO CAMPISTA", "HIDRO LUZ", "AXXONAL", "NOVAL PISOS E TINTAS", "OUTRO"];
+
+// MÍNIMO PADRÃO DO SETOR (pedido Renan/Lucas 06/07): quando o item não
+// tem mínimo próprio cadastrado, o alerta usa esta % do saldo inicial
+// (contagem física). João pode sobrescrever item a item no Cadastro.
+export const MINIMO_PADRAO_PCT: Record<string, number> = {
+  'ELÉTRICA': 20,
+  'HIDRÁULICA': 20,
+  'ESGOTO': 20,
+  'CIVIL': 15,
+  'PINTURA': 15,
+  'FERRAMENTAS': 0,   // ferramenta não é consumo — rastreia na aba própria
+  'DIVERSOS': 15,
+};

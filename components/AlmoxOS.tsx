@@ -3,7 +3,7 @@ import { PackageMinus, PackagePlus, Save, Loader2, Trash2, Link2, Undo2, Pencil,
 import { supabase } from '../services/supabaseClient';
 import { osService } from '../services/osService';
 import { OSCampo, refDaOS, EXECUTOR_OPTIONS } from '../types';
-import { MATERIAIS, UNIDADES, ORIGENS } from '../data/materiais';
+import { MATERIAIS, UNIDADES, ORIGENS, MINIMO_PADRAO_PCT } from '../data/materiais';
 import { ESCOLAS, fiscalDaEscola } from '../data/escolas';
 import { hojeLocal } from '../config';
 
@@ -104,18 +104,31 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
   const entradasPor = somaPor(entradas);
   const saidasPor = somaPor(saidas);
   const saldoDe = (i: ItemEstoque) => Number(i.saldo_inicial || 0) + (entradasPor[norm(i.descricao)] || 0) - (saidasPor[norm(i.descricao)] || 0);
-  // alerta do spec: sinalizar a 50% e a 20% da quantidade mínima
-  const nivelDe = (i: ItemEstoque) => {
-    if (!i.qtd_minima) return null;
-    const s = saldoDe(i);
-    if (s <= i.qtd_minima * 0.2) return { rot: '🔴 CRÍTICO', cls: 'bg-red-50 text-red-700 border-red-200' };
-    if (s <= i.qtd_minima * 0.5) return { rot: '🟠 repor já', cls: 'bg-orange-50 text-orange-700 border-orange-200' };
-    if (s <= i.qtd_minima) return { rot: '🟡 no mínimo', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+  // mínimo efetivo: o cadastrado no item OU a % padrão do setor sobre a
+  // contagem inicial (pedido Renan/Lucas 06/07 — só painel do João)
+  const minimoDe = (i: ItemEstoque): { min: number; padrao: boolean } | null => {
+    if (i.qtd_minima > 0) return { min: i.qtd_minima, padrao: false };
+    const pct = MINIMO_PADRAO_PCT[i.categoria] ?? 15;
+    if (pct > 0 && i.saldo_inicial > 0) return { min: i.saldo_inicial * pct / 100, padrao: true };
     return null;
   };
+  // alerta do spec: sinalizar a 50% e a 20% da quantidade mínima
+  const nivelDe = (i: ItemEstoque) => {
+    const m = minimoDe(i);
+    if (!m) return null;
+    const s = saldoDe(i);
+    const suf = m.padrao ? ' · padrão setor' : '';
+    if (s <= 0) return { rot: '🚨 EM FALTA', cls: 'bg-red-600 text-white border-red-600' };
+    if (s <= m.min * 0.2) return { rot: '🔴 CRÍTICO' + suf, cls: 'bg-red-50 text-red-700 border-red-200' };
+    if (s <= m.min * 0.5) return { rot: '🟠 repor já' + suf, cls: 'bg-orange-50 text-orange-700 border-orange-200' };
+    if (s <= m.min) return { rot: '🟡 no mínimo' + suf, cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+    return null;
+  };
+  const emFalta = itens.filter(i => (i.qtd_minima > 0 || i.saldo_inicial > 0) && saldoDe(i) <= 0);
   const top10Acabando = itens
-    .filter(i => i.qtd_minima > 0)
-    .map(i => ({ i, s: saldoDe(i), r: saldoDe(i) / i.qtd_minima }))
+    .map(i => ({ i, s: saldoDe(i), m: minimoDe(i) }))
+    .filter(x => x.m)
+    .map(x => ({ i: x.i, s: x.s, r: x.s / x.m!.min }))
     .sort((a, b) => a.r - b.r)
     .slice(0, 10);
 
@@ -236,7 +249,13 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
   const entregarFerr = async (f: Ferramenta) => {
     const quem = prompt(`Entregar "${f.descricao}" para quem? (encarregado/equipe)`); if (!quem) return;
     const obra = prompt('Em qual obra/escola?') || '';
-    await supabase.from('ferramenta').update({ status: 'EM CAMPO', com_quem: quem, obra, desde: hoje() }).eq('id', f.id);
+    // elo opcional com a O.S. (Renan/Lucas 06/07): rastreia não só COM
+    // QUEM está, mas EM QUAL SERVIÇO — sem virar baixa de estoque
+    const osRef = (prompt('Vinculada a alguma O.S.? (opcional — nº, L/M-nº ou F-nº)') || '').trim();
+    await supabase.from('ferramenta').update({
+      status: 'EM CAMPO', com_quem: quem.trim(), obra, desde: hoje(),
+      obs: osRef ? `O.S. ${osRef}` : null
+    }).eq('id', f.id);
     carregar();
   };
   const receberFerr = async (f: Ferramenta) => {
@@ -348,6 +367,11 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
       {/* ============ ESTATÍSTICA ============ */}
       {sub === 'stats' && (
         <>
+          {emFalta.length > 0 && (
+            <div className="text-xs font-bold text-white bg-red-600 rounded-xl px-3 py-2.5">
+              🚨 EM FALTA (saldo zerado/negativo): {emFalta.slice(0, 6).map(i => i.descricao).join(' · ')}{emFalta.length > 6 ? ` e mais ${emFalta.length - 6}` : ''} — repor!
+            </div>
+          )}
           <div className="grid grid-cols-4 gap-2">
             <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-3 text-center">
               <div className="text-2xl font-bold text-stone-900 tabular-nums">{saidasHoje.length}</div>
@@ -379,7 +403,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
                     <div key={i.id} className="flex items-center gap-2 text-sm">
                       <span className="flex-1 min-w-0 truncate text-stone-700">{i.descricao}</span>
                       <b className="tabular-nums">{s} {i.unidade}</b>
-                      <span className="text-[10px] text-stone-400">mín {i.qtd_minima}</span>
+                      <span className="text-[10px] text-stone-400">mín {(() => { const m = minimoDe(i); return m ? Math.round(m.min * 10) / 10 : ''; })()}</span>
                       {nv && <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${nv.cls}`}>{nv.rot}</span>}
                     </div>
                   );
@@ -565,7 +589,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
             {ferramentas.map(f => (
               <div key={f.id} className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${f.status === 'EM CAMPO' ? 'border-amber-200 bg-amber-50/50' : 'border-stone-100'}`}>
                 <span className="flex-1 min-w-0 truncate"><b>{f.quantidade > 1 ? f.quantidade + '× ' : ''}{f.descricao}</b>
-                  {f.status === 'EM CAMPO' && <span className="text-[11px] text-amber-800"> · com <b>{f.com_quem}</b>{f.obra ? ` em ${f.obra}` : ''}{f.desde ? ` desde ${f.desde.split('-').reverse().slice(0, 2).join('/')}` : ''}</span>}
+                  {f.status === 'EM CAMPO' && <span className="text-[11px] text-amber-800"> · com <b>{f.com_quem}</b>{f.obra ? ` em ${f.obra}` : ''}{(f as any).obs ? ` · ${(f as any).obs}` : ''}{f.desde ? ` desde ${f.desde.split('-').reverse().slice(0, 2).join('/')}` : ''}</span>}
                 </span>
                 {f.status === 'ESTOQUE'
                   ? <button onClick={() => entregarFerr(f)} className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-3 py-1">entregar →</button>
