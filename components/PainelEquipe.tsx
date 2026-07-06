@@ -27,6 +27,9 @@ interface Props {
 
 const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) => {
   const zona = lista.filter(o => o.fiscal === equipe.fiscal && o.status !== 'Cancelada');
+  // última numeração fictícia GLOBAL (spec do engenheiro: "no topo,
+  // qual foi a última numeração utilizada") — a próxima sai do trigger
+  const ultimaF = lista.reduce((m, o) => Math.max(m, o.numero_fict || 0), 0);
   const abertas = zona.filter(o => o.status !== 'Concluído');
   const estourou = (o: OSCampo) => {
     const d = dias(o.entrada);
@@ -58,6 +61,11 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) 
         <Siren size={18} className="text-red-600" />
         <h2 className="font-bold text-stone-900 flex-1">Emergência · zona {equipe.fiscal}</h2>
         <span className="text-[11px] font-bold text-stone-400">{medDoMes()} vigente</span>
+        {ultimaF > 0 && (
+          <span className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-full px-2 py-0.5" title="última numeração fictícia usada (a próxima o sistema gera sozinho)">
+            última F-{ultimaF}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-4 gap-2">
@@ -67,9 +75,18 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) 
         <Kpi n={concluidas7d.length} rot="concluídas 7d" />
       </div>
 
-      {semMemoria.length > 0 && (
+      {/* funil por status (spec do engenheiro): a zona em 4 baldes */}
+      <div className="grid grid-cols-4 gap-2">
+        <Kpi n={zona.filter(o => ['Pendente', 'Material'].includes(o.status)).length} rot="pendente" />
+        <Kpi n={zona.filter(o => o.status === 'Executando').length} rot="executando" />
+        <Kpi n={zona.filter(o => o.status === 'Assinatura').length} rot="assinatura" />
+        <Kpi n={zona.filter(o => o.status === 'Concluído').length} rot="concluído" />
+      </div>
+
+      {abertas.length > 0 && (
         <div className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-2">
-          <Ruler size={14} /> {semMemoria.length} O.S. aberta{semMemoria.length !== 1 ? 's' : ''} sem memória de cálculo — sem medida não vira medição.
+          <Ruler size={14} /> {abertas.length} O.S. em aberto na zona — sem foto e memória de cálculo, NÃO conclui.
+          {semMemoria.length > 0 && <> ({semMemoria.length} sem memória)</>}
         </div>
       )}
 
@@ -110,7 +127,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) 
 
       <button onClick={aoNovaOS}
         className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm">
-        <Siren size={18} /> REGISTRAR EMERGÊNCIA AGORA
+        <Siren size={18} /> REGISTRO DE ORDEM DE SERVIÇO / EMERGENCIAL AGORA
       </button>
 
       <p className="text-[11px] text-stone-400 text-center flex items-center justify-center gap-1">

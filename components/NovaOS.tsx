@@ -100,6 +100,20 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     e.preventDefault();
     if (!os.unidade.trim()) { setMsg('Informe a unidade (escola).'); return; }
     if (equipe && !os.executor) { setMsg('Toque em QUEM EXECUTOU (botões da equipe).'); return; }
+    // MEDIÇÃO FECHADA é intocável pelo campo (spec do engenheiro) —
+    // só a vigente edita; gestão corrige com essa responsabilidade
+    if (!ehGestor && os.id && (os.medicao || '').trim() && os.medicao !== medDoMes()) {
+      setMsg(`🔒 Esta O.S. está na ${os.medicao} (medição FECHADA) — não pode mais ser alterada. Fale com a gestão.`);
+      return;
+    }
+    // SÓ CONCLUI COMPLETA: sem foto + memória + executor não fecha
+    if (!ehGestor && os.status === 'Concluído') {
+      const falta: string[] = [];
+      if (os.foto_urls.length + fotos.length === 0) falta.push('foto');
+      if (!os.memoria_calculo.trim()) falta.push('memória de cálculo');
+      if (!os.executor.trim()) falta.push('executor');
+      if (falta.length > 0) { setMsg(`⛔ Para CONCLUIR falta: ${falta.join(' + ')}. Sem as informações a O.S. não será concluída.`); return; }
+    }
     setSalvando(true);
     setMsg('');
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash } from 'lucide-react';
+import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
 import { OSCampo } from '../types';
+import { medDoMes } from '../config';
 import { osService } from '../services/osService';
 
 interface Props {
@@ -55,6 +56,12 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const [soMinhas, setSoMinhas] = useState(!!filtroMinhas);
   const [filtro, setFiltro] = useState('Todas');
   const [mostrar, setMostrar] = useState(100); // com a planilha importada são ~1.800 O.S.
+  const [aberta, setAberta] = useState<number | null>(null); // card expandido (descrição completa)
+
+  // MEDIÇÃO FECHADA = intocável (spec do engenheiro): só a vigente edita.
+  // Gestão ainda corrige (com aviso); campo não mexe.
+  const medicaoFechada = (os: OSCampo) => !!(os.medicao || '').trim() && os.medicao !== medDoMes();
+  const travada = (os: OSCampo) => medicaoFechada(os) && !podeExcluir;
 
   const minhas = filtroMinhas ? lista.filter(os => filtroMinhas(os) && os.status !== 'Cancelada') : [];
   const base = filtroMinhas && (soMinhas || restrito) ? minhas : lista;
@@ -81,7 +88,19 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     aoMudar();
   };
 
+  // SÓ CONCLUI COMPLETA (spec do engenheiro): sem foto, memória e executor
+  // não fecha — é o que trava a glosa lá na frente. Gestão pode forçar.
   const concluir = async (os: OSCampo) => {
+    if (!podeExcluir) {
+      const falta: string[] = [];
+      if (!(os.foto_urls?.length > 0)) falta.push('foto');
+      if (!(os.memoria_calculo || '').trim()) falta.push('memória de cálculo');
+      if (!(os.executor || '').trim()) falta.push('executor');
+      if (falta.length > 0) {
+        alert(`⛔ Para CONCLUIR falta: ${falta.join(' + ')}.\n\nToque no lápis, complete e conclua — sem as informações a O.S. não será concluída.`);
+        return;
+      }
+    }
     await osService.salvar({ ...os, status: 'Concluído', conclusao: os.conclusao || new Date().toISOString().slice(0, 10) });
     aoMudar();
   };
@@ -158,39 +177,72 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
       <div className="space-y-2">
         {filtradas.slice(0, mostrar).map(os => {
           const alerta = alertaPrazo(os);
+          const exp = aberta === os.id;
           return (
-            <div key={os.id} className="flex items-start gap-3 border border-stone-100 rounded-xl p-3 hover:border-fpv-100 transition-colors">
-              <div className="w-14 shrink-0 text-center">
-                <div className="font-bold text-stone-900 tabular-nums">{os.numero ?? (os.numero_fict ? `F-${os.numero_fict}` : 'S/Nº')}</div>
-                {os.emergencial && <Siren size={13} className="text-red-500 mx-auto mt-1" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-stone-800 truncate">{os.unidade}</div>
-                <div className="text-xs text-stone-500 truncate">{os.servico || os.materiais || '—'}</div>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${pillCor(os.status)}`}>{os.status}{os.medicao ? ' · ' + os.medicao : ''}</span>
-                  {alerta && <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${alerta.cls}`}>{alerta.txt}</span>}
-                  {os.executor && <span className="text-[11px] text-stone-500">{os.executor}</span>}
-                  {os.memoria_calculo && <span className="text-[11px] text-fpv-600 font-bold">📐 memória ok</span>}
-                  {os.foto_urls?.length > 0 && <span className="text-[11px] text-stone-500">📷 {os.foto_urls.length}</span>}
+            <div key={os.id} className={`border rounded-xl p-3 transition-colors ${travada(os) ? 'border-stone-100 bg-stone-50/60' : 'border-stone-100 hover:border-fpv-100'}`}>
+              <div className="flex items-start gap-3">
+                <div className="w-14 shrink-0 text-center">
+                  <div className="font-bold text-stone-900 tabular-nums">{os.numero ?? (os.numero_fict ? `F-${os.numero_fict}` : 'S/Nº')}</div>
+                  {os.emergencial && <Siren size={13} className="text-red-500 mx-auto mt-1" />}
+                </div>
+                <button type="button" onClick={() => setAberta(exp ? null : (os.id ?? null))} className="flex-1 min-w-0 text-left">
+                  <div className="text-sm font-medium text-stone-800 truncate">{os.unidade}</div>
+                  <div className="text-xs text-stone-500 truncate">{os.solicitado || os.servico || os.materiais || '—'}</div>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${pillCor(os.status)}`}>{os.status}{os.medicao ? ' · ' + os.medicao : ''}</span>
+                    {medicaoFechada(os) && <span className="text-[11px] font-bold border rounded-full px-2 py-0.5 bg-stone-100 text-stone-500 border-stone-200">🔒 medição fechada</span>}
+                    {alerta && <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${alerta.cls}`}>{alerta.txt}</span>}
+                    {os.executor && <span className="text-[11px] text-stone-500">{os.executor}</span>}
+                    {os.memoria_calculo && <span className="text-[11px] text-fpv-600 font-bold">📐 memória ok</span>}
+                    {os.foto_urls?.length > 0 && <span className="text-[11px] text-stone-500">📷 {os.foto_urls.length}</span>}
+                    {exp ? <ChevronUp size={13} className="text-stone-400" /> : <ChevronDown size={13} className="text-stone-300" />}
+                  </div>
+                </button>
+                <div className="flex flex-col gap-1 shrink-0">
+                  {travada(os) ? (
+                    <span className="p-1.5 text-stone-300" title="Medição fechada — só a gestão altera"><Lock size={16} /></span>
+                  ) : (
+                    <>
+                      {os.status !== 'Concluído' && (
+                        <button onClick={() => concluir(os)} title="Marcar concluída"
+                          className="p-1.5 text-fpv-600 hover:bg-fpv-50 rounded-lg"><CheckCircle2 size={16} /></button>
+                      )}
+                      {os.numero == null && (
+                        <button onClick={() => vincularNumero(os)} title="Chegou a O.S. oficial por e-mail? Vincular nº"
+                          className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"><Hash size={16} /></button>
+                      )}
+                      <button onClick={() => aoEditar(os)} title="Editar"
+                        className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-stone-50 rounded-lg"><Pencil size={16} /></button>
+                      {podeExcluir && (
+                        <button onClick={() => excluir(os)} title="Excluir"
+                          className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="flex flex-col gap-1 shrink-0">
-                {os.status !== 'Concluído' && (
-                  <button onClick={() => concluir(os)} title="Marcar concluída"
-                    className="p-1.5 text-fpv-600 hover:bg-fpv-50 rounded-lg"><CheckCircle2 size={16} /></button>
-                )}
-                {os.numero == null && (
-                  <button onClick={() => vincularNumero(os)} title="Chegou a O.S. oficial por e-mail? Vincular nº"
-                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"><Hash size={16} /></button>
-                )}
-                <button onClick={() => aoEditar(os)} title="Editar"
-                  className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-stone-50 rounded-lg"><Pencil size={16} /></button>
-                {podeExcluir && (
-                  <button onClick={() => excluir(os)} title="Excluir"
-                    className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
-                )}
-              </div>
+
+              {/* descrição completa (spec do engenheiro: ver o texto da O.S.
+                  do e-mail em qualquer status) — toque no card abre/fecha */}
+              {exp && (
+                <div className="mt-2 ml-[4.25rem] space-y-1.5 text-xs text-stone-600 border-t border-stone-100 pt-2">
+                  {os.solicitado && <p><b className="text-stone-400 uppercase text-[10px]">Fiscal pediu (e-mail): </b>{os.solicitado}</p>}
+                  {os.servico && <p><b className="text-stone-400 uppercase text-[10px]">Executado: </b>{os.servico}</p>}
+                  {os.materiais && <p><b className="text-stone-400 uppercase text-[10px]">Materiais: </b>{os.materiais}</p>}
+                  {os.memoria_calculo && <p><b className="text-stone-400 uppercase text-[10px]">Memória: </b>{os.memoria_calculo}</p>}
+                  <p><b className="text-stone-400 uppercase text-[10px]">Fiscal: </b>{os.fiscal || '—'} · <b className="text-stone-400 uppercase text-[10px]">Entrada: </b>{os.entrada || '—'} · <b className="text-stone-400 uppercase text-[10px]">Conclusão: </b>{os.conclusao || '—'}</p>
+                  {os.foto_urls?.length > 0 && (
+                    <p className="flex gap-2 flex-wrap">
+                      {os.foto_urls.map((u, i) => (
+                        <a key={i} href={u} target="_blank" rel="noreferrer" className="text-fpv-700 font-bold underline">📷 foto {i + 1}</a>
+                      ))}
+                    </p>
+                  )}
+                  {!os.solicitado && !os.servico && !os.materiais && !os.memoria_calculo && (
+                    <p className="text-stone-400">Sem descrição registrada ainda — toque no lápis para completar.</p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
