@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v22';
+const VERSAO = 'v23';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -155,7 +155,7 @@ const App: React.FC = () => {
 
       <main className="max-w-3xl mx-auto p-4">
         {aba === 'painel' && equipe && (
-          <PainelEquipe lista={lista} equipe={equipe} aoVerLista={() => setAba('lista')} aoNovaOS={() => setAba('nova')} />
+          <PainelEquipe lista={lista} equipe={equipe} usuario={usuario} aoVerLista={() => setAba('lista')} aoNovaOS={() => setAba('nova')} />
         )}
         {VOZ_ATIVA && aba === 'chat' && !soAlmox && <ChatOS aoSalvar={recarregar} />}
         {aba === 'nova' && !soAlmox && (

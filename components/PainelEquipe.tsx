@@ -1,7 +1,8 @@
-import React from 'react';
-import { Siren, AlertTriangle, Camera, Ruler, CheckCircle2, ArrowRight } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Siren, AlertTriangle, Camera, Ruler, CheckCircle2, ArrowRight, Package, Send } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
 import { Equipe, medDoMes } from '../config';
+import { supabase } from '../services/supabaseClient';
 
 // =============================================================
 // PAINEL DA EQUIPE DE EMERGÊNCIA — a zona do fiscal num relance:
@@ -18,14 +19,58 @@ const dias = (iso?: string | null): number | null => {
 
 const rotulo = refDaOS;
 
+interface Solicitacao {
+  id?: number; data: string; solicitante: string; os_ref?: string | null;
+  itens: string; status: string;
+}
+
 interface Props {
   lista: OSCampo[];
   equipe: Equipe;
+  usuario: string;
   aoVerLista: () => void;
   aoNovaOS: () => void;
 }
 
-const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) => {
+const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoNovaOS }) => {
+  // ===== material: pedir ao almoxarifado + confirmar recebimento =====
+  const [pedidoAberto, setPedidoAberto] = useState(false);
+  const [itensPedido, setItensPedido] = useState('');
+  const [osPedido, setOsPedido] = useState('');
+  const [meusPedidos, setMeusPedidos] = useState<Solicitacao[]>([]);
+  const [retiradas, setRetiradas] = useState<any[]>([]);
+  const [msgMat, setMsgMat] = useState('');
+
+  const carregarMaterial = async () => {
+    const { data } = await supabase.from('solicitacao_material').select('*')
+      .eq('solicitante', equipe.apelido).order('criado_em', { ascending: false }).limit(6);
+    if (data) setMeusPedidos(data as Solicitacao[]);
+    // saídas do almoxarifado destinadas à equipe aguardando confirmação
+    const { data: r } = await supabase.from('saida_material').select('*')
+      .eq('recebido', false).in('destinatario', [equipe.apelido, ...equipe.membros]).limit(20);
+    if (r) setRetiradas(r);
+  };
+  useEffect(() => { carregarMaterial(); }, []);
+
+  const enviarPedido = async () => {
+    if (!itensPedido.trim()) { setMsgMat('Escreva os itens — um por linha, com quantidade.'); return; }
+    const { error } = await supabase.from('solicitacao_material').insert([{
+      solicitante: equipe.apelido, os_ref: osPedido || null, itens: itensPedido.trim()
+    }]);
+    if (error) { setMsgMat(/solicitacao_material/.test(error.message) ? '⚠️ O gestor precisa rodar o ALMOX-V2.sql primeiro.' : 'Erro: ' + error.message); return; }
+    setMsgMat('📦 Pedido enviado ao almoxarifado!');
+    setItensPedido(''); setOsPedido(''); setPedidoAberto(false);
+    carregarMaterial();
+  };
+
+  const confirmarRecebido = async (q: Solicitacao) => {
+    await supabase.from('solicitacao_material').update({ status: 'RECEBIDO' }).eq('id', q.id);
+    carregarMaterial();
+  };
+  const confirmarRetirada = async (r: any) => {
+    await supabase.from('saida_material').update({ recebido: true }).eq('id', r.id);
+    carregarMaterial();
+  };
   const zona = lista.filter(o => o.fiscal === equipe.fiscal && o.status !== 'Cancelada');
   // última numeração DA EQUIPE (spec do engenheiro: "no topo, qual foi a
   // última utilizada") — L/M-nº novo; cai pro F-nn legado se ainda não há
@@ -137,6 +182,58 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) 
         className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm">
         <Siren size={18} /> REGISTRO DE ORDEM DE SERVIÇO / EMERGENCIAL AGORA
       </button>
+
+      {/* ===== MATERIAL: pedir ao almoxarifado + confirmar recebimento ===== */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4 space-y-2">
+        <button onClick={() => setPedidoAberto(a => !a)} className="w-full flex items-center gap-2 text-sm font-bold text-stone-900">
+          <Package size={16} className="text-fpv-600" /> Material com o almoxarifado
+          {(retiradas.length > 0 || meusPedidos.some(q => q.status === 'SEPARADO')) &&
+            <span className="text-[10px] bg-red-600 text-white rounded-full px-2 py-0.5">confirmar!</span>}
+          <span className="ml-auto text-stone-400 font-medium text-xs">{pedidoAberto ? 'fechar ▲' : 'abrir ▼'}</span>
+        </button>
+
+        {pedidoAberto && (
+          <div className="space-y-2 pt-1">
+            <textarea value={itensPedido} onChange={e => setItensPedido(e.target.value)} rows={3}
+              placeholder={'um item por linha, com quantidade:\n2 UND SIFÃO\n10 M FIO 2,5MM'}
+              className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 resize-y" />
+            <div className="flex gap-2">
+              <input value={osPedido} onChange={e => setOsPedido(e.target.value)} placeholder="O.S. (opcional)"
+                className="w-32 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
+              <button onClick={enviarPedido} className="flex-1 bg-fpv-600 hover:bg-fpv-700 text-white font-bold rounded-lg py-2 text-sm flex items-center justify-center gap-1.5">
+                <Send size={14} /> Enviar pedido
+              </button>
+            </div>
+          </div>
+        )}
+        {msgMat && <p className="text-xs font-bold text-fpv-700">{msgMat}</p>}
+
+        {meusPedidos.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            {meusPedidos.map(q => (
+              <div key={q.id} className="flex items-center gap-2 text-xs border border-stone-100 rounded-lg px-2.5 py-1.5">
+                <span className="flex-1 min-w-0 truncate text-stone-600">{q.itens.split('\n')[0]}{q.itens.includes('\n') ? '…' : ''}{q.os_ref ? ` · O.S. ${q.os_ref}` : ''}</span>
+                <span className={`font-bold rounded-full px-2 py-0.5 text-[10px] ${q.status === 'PEDIDO' ? 'bg-stone-100 text-stone-500' : q.status === 'SEPARADO' ? 'bg-amber-500 text-white' : 'bg-fpv-600 text-white'}`}>{q.status}</span>
+                {q.status === 'SEPARADO' && (
+                  <button onClick={() => confirmarRecebido(q)} className="font-bold text-white bg-fpv-600 rounded-full px-2 py-0.5 text-[10px]">RECEBI ✔</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {retiradas.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <p className="text-[11px] font-bold text-amber-800">O almoxarifado registrou estas retiradas no seu nome — confirme:</p>
+            {retiradas.map(r => (
+              <div key={r.id} className="flex items-center gap-2 text-xs border border-amber-200 bg-amber-50/50 rounded-lg px-2.5 py-1.5">
+                <span className="flex-1 min-w-0 truncate text-stone-700"><b>{r.quantidade} {r.unidade}</b> {r.descricao}{r.os_ref ? ` · O.S. ${r.os_ref}` : ''}</span>
+                <button onClick={() => confirmarRetirada(r)} className="font-bold text-white bg-fpv-600 rounded-full px-2 py-0.5 text-[10px]">RECEBI ✔</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <p className="text-[11px] text-stone-400 text-center flex items-center justify-center gap-1">
         <CheckCircle2 size={12} /> Tudo que salvar aqui cai no banco central e na planilha do medidor.
