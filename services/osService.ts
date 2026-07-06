@@ -42,6 +42,14 @@ export const osService = {
       }
       return { ok: !error, erro: error?.message };
     }
+    // PISO ANTI-COLISÃO COM O PAPEL (conciliação 06/07: a contagem manual
+    // já chegou a F-87): sem nº oficial e sem ref de equipe, o app gera o
+    // F-nº AQUI com piso 88 — o trigger do banco vira só reserva
+    if (!payload.numero && !payload.fict_ref) {
+      const f = await this.proximaF();
+      if (f) payload.fict_ref = `F-${f}`;
+    }
+
     // insert devolve a linha gravada — o trigger do banco atribui o F-nº
     let { data, error } = await supabase.from('os_campo').insert([payload]).select().single();
 
@@ -65,6 +73,15 @@ export const osService = {
     if (error && /'area'/i.test(error.message)) {
       delete base.area;
       ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
+    }
+
+    // empate no F-nº (dois salvamentos juntos): recalcula e tenta 1x
+    if (error && /duplicate|unique/i.test(error.message) && String(base.fict_ref || '').startsWith('F-')) {
+      const f2 = await this.proximaF();
+      if (f2) {
+        base.fict_ref = `F-${f2}`;
+        ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
+      }
     }
 
     // resiliência: se o banco ainda não tem a coluna 'solicitado',
@@ -98,6 +115,29 @@ export const osService = {
         .update({ status: 'Cancelada' }).eq('id', id));
     }
     return !error;
+  },
+
+  // Próximo F-nº GLOBAL calculado pelo app: maior entre F-nn legado
+  // (numero_fict), F-refs novas e o PISO 87 (contagem do papel chegou
+  // lá em 24/06 — conciliação da planilha da Brendah). Dispensa o
+  // setval do banco. null = coluna fict_ref ausente (deixa p/ o trigger).
+  async proximaF(): Promise<number | null> {
+    try {
+      const [a, b] = await Promise.all([
+        supabase.from('os_campo').select('numero_fict').not('numero_fict', 'is', null)
+          .order('numero_fict', { ascending: false }).limit(1),
+        supabase.from('os_campo').select('fict_ref').like('fict_ref', 'F-%'),
+      ]);
+      if (b.error) return null; // sem coluna fict_ref → trigger resolve
+      let m = 87;
+      const nf = (a.data?.[0] as any)?.numero_fict;
+      if (nf && nf > m) m = nf;
+      for (const r of (b.data as { fict_ref: string }[]) || []) {
+        const n = parseInt(String(r.fict_ref).slice(2), 10);
+        if (!isNaN(n) && n > m) m = n;
+      }
+      return m + 1;
+    } catch { return null; }
   },
 
   // O nº oficial digitado já existe? (guarda anti-duplicata — caso real
@@ -140,10 +180,10 @@ export const osService = {
     return this.salvar(os); // 3 empates seguidos (improvável) → F-nn garante o registro
   },
 
-  // Próximo número da contagem FICTÍCIA (segue a sequência criada pelo almoxarifado).
-  // Início em 77 = continua de onde a contagem manual parou.
+  // Próximo número da contagem FICTÍCIA (legado do Chat; piso atualizado
+  // p/ 88 após a conciliação mostrar o papel em F-87).
   async proximaFict(): Promise<number> {
-    const INICIO_FICT = 77;
+    const INICIO_FICT = 88;
     const { data, error } = await supabase
       .from('os_campo')
       .select('numero_fict')
