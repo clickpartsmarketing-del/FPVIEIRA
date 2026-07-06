@@ -111,6 +111,18 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       setMsg(`🔒 Esta O.S. está na ${os.medicao} (medição FECHADA) — não pode mais ser alterada. Fale com a gestão.`);
       return;
     }
+    // GUARDA ANTI-DUPLICATA (caso real 06/07: digitaram "79" seguindo a
+    // contagem do papel e colidiu com a O.S. 79 oficial de janeiro)
+    if (!os.id && os.numero) {
+      const existe = await osService.numeroExiste(Number(os.numero));
+      if (existe) {
+        if (!ehGestor) {
+          setMsg(`⛔ A O.S. ${os.numero} JÁ EXISTE (${existe.unidade} · ${existe.status}). Se a sua é NOVA, deixe o Nº VAZIO — o sistema gera o ${prefixoRef ?? 'F'}-nº sozinho. Se é a mesma, ache-a na lista e edite pelo lápis.`);
+          return;
+        }
+        if (!confirm(`O.S. ${os.numero} já existe (${existe.unidade} · ${existe.status}). Criar DUPLICADA mesmo assim?`)) return;
+      }
+    }
     // SÓ CONCLUI COMPLETA: sem foto + memória + executor não fecha
     if (!ehGestor && os.status === 'Concluído') {
       const falta: string[] = [];

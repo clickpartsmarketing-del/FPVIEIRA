@@ -61,3 +61,58 @@ Multi-contrato de verdade = 1 banco com coluna `contrato_id` + login multi-contr
 (schema já desenhado em `estoque_schema.sql`) + n8n na VPS da empresa espelhando
 p/ Google Sheets. Por ora, 1 projeto Supabase por contrato é mais simples, isola
 riscos e continua grátis.
+
+---
+
+## LIÇÕES DE PRODUÇÃO — semana 1 real (06/07/2026, FP.094)
+
+O que o teste com usuários reais ensinou. Replicar contrato novo SEM ler isto = repetir os erros.
+
+### Índice do que é PARAMETRIZÁVEL por contrato (onde mexer)
+
+| O quê | Onde |
+|---|---|
+| Voz ligada/desligada | `config.ts` → `VOZ_ATIVA` (semana 1 sempre OFF: formulário primeiro) |
+| Equipes de emergência (fiscal da zona, membros, prefixo L/M, apelido) | `config.ts` → `EQUIPES` |
+| Encarregados corretiva (executor, prefixo G/C) | `config.ts` → `CORRETIVA` |
+| Gestores e almoxarife | `config.ts` → `GESTORES`, `ALMOX` |
+| Âncora da medição (MED n = mês) | `config.ts` → `medDoMes()` + `medAtual()` em Gestao.tsx |
+| Unidades + zona/fiscal de cada uma | `data/escolas.ts` → `ESCOLAS`, `ZONA_ESCOLA` |
+| Catálogo de materiais + kit emergencial | `data/materiais.ts` |
+| Fiscais/executores/medições válidos | `types.ts` |
+| Planilha Google (docId/aba) dos fluxos n8n | `n8n/*.json` |
+| SQLs de bootstrap (ordem) | supabase.sql → supabase_vps.sql → PENDENTES-CONSOLIDADO → ALMOX-V2 → REALTIME-E-TIPO → AUDITORIA-EDICOES |
+
+### As 7 lições que valem ouro
+
+1. **O fluxo real da emergência começa no ALMOXARIFADO**, não no app da equipe:
+   o campo pega material ANTES de registrar O.S. Por isso o balcão do João gera a
+   O.S. emergencial na hora ("Emergência SEM O.S.? gerar e vincular"). Sem isso,
+   a fictícia nunca nasce.
+2. **O hábito do papel persiste**: a equipe DIGITOU "79" no campo de número
+   (seguindo a contagem manual) e colidiu com a O.S. 79 oficial. Guarda
+   anti-duplicata no formulário é OBRIGATÓRIA desde o dia 1 (v29).
+3. **Cache de bundle no celular é a fonte nº 1 de "bug fantasma"**: versão
+   visível no cabeçalho (VERSAO em App.tsx) + protocolo "confere o vzinho antes
+   de reportar" economiza horas de suporte.
+4. **Texto digitado por humano vem sujo**: "Gilson " com espaço, escola fora da
+   lista, material fora do catálogo. Todo cruzamento por texto precisa de match
+   normalizado (trim + minúsculas + sem acento).
+5. **Números NUNCA voltam atrás** (regra do dono): exclusão = marca (soft delete)
+   + livro-razão imutável (`os_campo_log`). Sequências calculam pelo máximo
+   EXISTENTE — só funciona porque nada é apagado de verdade.
+6. **A planilha oficial pré-aloca linhas com fórmulas** (#N/A até ~1827): o fluxo
+   n8n "Acha Linha" depende disso. Verificar o desenho da planilha do contrato
+   novo ANTES de plugar o n8n.
+7. **Adoção real, dia 1**: almoxarife = usuário-âncora (18 saídas no 1º dia);
+   equipes logam mas precisam de treino no salvar/confirmar; gestão (rafael) e
+   medição (edmar) são os últimos a entrar — onboarding deles é tarefa ativa,
+   não passiva.
+
+### Sequência de onboarding que funcionou
+
+1º almoxarife (âncora, movimenta o dia todo) → 2º equipes de emergência
+(painel + registro guiado, com alguém do lado no 1º registro) → 3º corretiva →
+4º engenheiro (rota/conferência) → 5º medição (esteira Edmar) → 6º gestores
+(boletim). Senha pessoal (`DadoPessoal@DDMM-admissão`) entregue por WhatsApp,
+troca no 🔑 do app.

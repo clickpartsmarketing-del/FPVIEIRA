@@ -99,6 +99,16 @@ export const osService = {
     return !error;
   },
 
+  // O nº oficial digitado já existe? (guarda anti-duplicata — caso real
+  // 06/07: equipe digitou "79" seguindo a contagem do papel e colidiu
+  // com a O.S. 79 oficial de janeiro)
+  async numeroExiste(n: number): Promise<OSCampo | null> {
+    const { data, error } = await supabase.from('os_campo')
+      .select('id,numero,unidade,status').eq('numero', n).limit(1);
+    if (error || !data || data.length === 0) return null;
+    return data[0] as OSCampo;
+  },
+
   // NUMERAÇÃO POR EQUIPE (L01/M01…): calcula o próximo da equipe; o índice
   // único do banco derruba empate de 2 celulares e o salvarEquipe re-tenta.
   // Devolve null se a coluna fict_ref ainda não existe (fallback = F-nn).
