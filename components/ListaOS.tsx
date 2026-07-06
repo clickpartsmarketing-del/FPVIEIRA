@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
-import { medDoMes } from '../config';
+import { medDoMes, hojeLocal } from '../config';
 import { osService } from '../services/osService';
 
 interface Props {
@@ -101,7 +101,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
         return;
       }
     }
-    await osService.salvar({ ...os, status: 'Concluído', conclusao: os.conclusao || new Date().toISOString().slice(0, 10) });
+    await osService.salvar({ ...os, status: 'Concluído', conclusao: os.conclusao || hojeLocal() });
     aoMudar();
   };
 

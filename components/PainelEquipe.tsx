@@ -50,6 +50,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
   const [retiradas, setRetiradas] = useState<any[]>([]);
   const [msgMat, setMsgMat] = useState('');
 
+  const jaAbriuSozinho = React.useRef(false);
   const carregarMaterial = async () => {
     const { data } = await supabase.from('solicitacao_material').select('*')
       .eq('solicitante', cfg.apelido).order('criado_em', { ascending: false }).limit(6);
@@ -61,7 +62,15 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
     if (r) {
       const nrm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
       const meus = [cfg.apelido, ...cfg.membros].map(nrm);
-      setRetiradas(r.filter((s: any) => meus.includes(nrm(s.destinatario))));
+      const minhas = r.filter((s: any) => meus.includes(nrm(s.destinatario)));
+      setRetiradas(minhas);
+      // adoção real (12 pendentes, 0 confirmadas no dia 1): se tem coisa
+      // p/ confirmar, a seção ABRE SOZINHA — 1ª vez por visita
+      const temSeparado = (data || []).some((q: any) => q.status === 'SEPARADO');
+      if ((minhas.length > 0 || temSeparado) && !jaAbriuSozinho.current) {
+        jaAbriuSozinho.current = true;
+        setPedidoAberto(true);
+      }
     }
   };
   useEffect(() => { carregarMaterial(); }, []);

@@ -43,3 +43,9 @@ export const CORRETIVA: Record<string, Corretiva> = {
 // (a 7ª fechou em junho/26 — âncora confirmada pelo Renan em 05/07)
 export const medDoMes = (d = new Date()) =>
   `MED ${8 + (d.getFullYear() - 2026) * 12 + (d.getMonth() - 6)}`;
+
+// Data de HOJE no fuso do CELULAR (Brasília) — nunca usar toISOString()
+// para data: ele devolve UTC (3h à frente) e depois das 21h carimbaria
+// a data de AMANHÃ na saída/O.S. (achado do Renan, 06/07)
+export const hojeLocal = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

@@ -4,6 +4,7 @@ import { osService } from '../services/osService';
 import { supabase } from '../services/supabaseClient';
 import { ESCOLAS } from '../data/escolas';
 import { AREAS, areaDoTexto, guiaMedida } from '../data/areas';
+import { hojeLocal } from '../config';
 
 // ============================================================
 // CHAT O.S. — engenharia reversa da planilha de medição:
@@ -424,7 +425,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     setDados(d => ({
       ...d,
       status: terminou ? 'Concluído' : 'Executando',
-      conclusao: terminou ? new Date().toISOString().slice(0, 10) : null
+      conclusao: terminou ? hojeLocal() : null
     }));
     bot('📷 Foto do serviço (antes/depois) vale ouro contra glosa. Tira uma ou toca em PULAR.');
     mudarEtapa('foto');
@@ -475,7 +476,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
       unidade: dados.unidade,
       fiscal: dados.fiscal || 'Central',
       classificacao: 'Emergencial',
-      entrada: new Date().toISOString().slice(0, 10),
+      entrada: hojeLocal(),
       conclusao: dados.conclusao,
       executor,
       status: dados.status,

@@ -4,7 +4,7 @@ import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTI
 import { ESCOLAS } from '../data/escolas';
 import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
-import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, medDoMes } from '../config';
+import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, medDoMes, hojeLocal } from '../config';
 import { osService } from '../services/osService';
 
 const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
@@ -23,7 +23,7 @@ const vaziaPara = (usuario: string): OSCampo => {
     unidade: '',
     fiscal: equipe?.fiscal ?? 'Wellington',
     classificacao: equipe ? 'Emergencial' : 'Normal',
-    entrada: new Date().toISOString().slice(0, 10),
+    entrada: hojeLocal(),
     conclusao: null,
     executor: executorLogado ?? '',
     status: 'Executando',

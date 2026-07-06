@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Printer, FileSignature } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
+import { hojeLocal } from '../config';
 
 interface Props { lista: OSCampo[]; }
 
-const hoje = () => new Date().toISOString().slice(0, 10);
-const diasAtras = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+const hoje = () => hojeLocal();
+const diasAtras = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return hojeLocal(d); };
 const br = (iso: string | null) => (iso ? iso.split('-').reverse().join('/') : '—');
 
 const FechamentoSemanal: React.FC<Props> = ({ lista }) => {

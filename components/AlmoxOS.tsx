@@ -5,6 +5,7 @@ import { osService } from '../services/osService';
 import { OSCampo, refDaOS, EXECUTOR_OPTIONS } from '../types';
 import { MATERIAIS, UNIDADES, ORIGENS } from '../data/materiais';
 import { ESCOLAS, fiscalDaEscola } from '../data/escolas';
+import { hojeLocal } from '../config';
 
 // =============================================================
 // ALMOXARIFADO v2 (spec engenheiro REV 000) — painel do João:
@@ -35,7 +36,7 @@ interface Solicitacao {
 }
 
 const CATEGORIAS = ['ELÉTRICA', 'HIDRÁULICA', 'ESGOTO', 'CIVIL', 'PINTURA', 'FERRAMENTAS', 'DIVERSOS'];
-const hoje = () => new Date().toISOString().slice(0, 10);
+const hoje = () => hojeLocal();
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 const SAIDA_VAZIA: Saida = { data: hoje(), descricao: '', quantidade: 1, unidade: 'UND', os_ref: '', escola: '', origem: 'ALMOXARIFADO', obs: '', destinatario: '' };
@@ -120,7 +121,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
 
   const ehDevolucao = (s: Saida) => s.quantidade < 0 || /devolu/i.test(s.origem || '');
   const hojeStr = hoje();
-  const seteDias = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const seteDias = hojeLocal(new Date(Date.now() - 7 * 86400000));
   const saidasHoje = saidas.filter(s => s.data === hojeStr && !ehDevolucao(s));
   const semOS = saidas.filter(s => !ehDevolucao(s) && !(s.os_ref || '').trim());
   const pedidosAbertos = solicitacoes.filter(q => q.status === 'PEDIDO');
@@ -448,8 +449,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
               <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Escola / destino</label>
                 <input list="escolas-almox" value={saida.escola} onChange={e => setSaida(p => ({ ...p, escola: e.target.value }))} className={inputCls} />
                 <datalist id="escolas-almox">{ESCOLAS.map(e2 => <option key={e2} value={e2} />)}</datalist></div>
-              <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Quem retirou (confirma no login)</label>
-                <input list="destinatarios" value={saida.destinatario || ''} onChange={e => setSaida(p => ({ ...p, destinatario: e.target.value }))} placeholder="opcional" className={inputCls} />
+              <div><label className={`block text-[11px] font-bold uppercase mb-1 ${(saida.destinatario || '').trim() ? 'text-stone-500' : 'text-amber-600'}`}>Quem retirou (confirma no login)</label>
+                <input list="destinatarios" value={saida.destinatario || ''} onChange={e => setSaida(p => ({ ...p, destinatario: e.target.value }))} placeholder="quem levou? (rastro!)"
+                  className={(saida.destinatario || '').trim() ? inputCls : 'w-full border-2 border-amber-300 rounded-lg px-3 py-2.5 text-sm bg-amber-50/40 outline-none focus:border-fpv-500'} />
                 <datalist id="destinatarios">{DESTINATARIOS.map(d => <option key={d} value={d} />)}</datalist></div>
             </div>
             <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Observação (de onde veio, detalhe da origem…)</label>

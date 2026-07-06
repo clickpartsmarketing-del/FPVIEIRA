@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { OSCampo } from '../types';
+import { hojeLocal } from '../config';
 
 export const osService = {
   // AUDITORIA: antes, um erro no meio da paginação devolvia lista PARCIAL
@@ -158,7 +159,7 @@ export const osService = {
   // exatamente como se o João tivesse lançado. Devolve quantas falharam.
   async baixaKit(itens: { descricao: string; quantidade: number; unidade: string }[], osRef: string, escola: string): Promise<number> {
     if (!itens.length) return 0;
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeLocal();
     const linhas = itens.map(i => ({
       data: hoje, descricao: i.descricao, quantidade: i.quantidade,
       unidade: i.unidade, os_ref: osRef || null, escola, origem: 'KIT EMERGENCIAL'
