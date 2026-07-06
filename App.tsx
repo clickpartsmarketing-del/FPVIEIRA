@@ -16,7 +16,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento';
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v18';
+const VERSAO = 'v19';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -77,8 +77,11 @@ const App: React.FC = () => {
   // FISCAL (zona) — decisão Renan 05/07
   const meuExecutor = ehGestor || equipe ? undefined
     : EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
+  // equipe vê TODAS as O.S. da zona do seu fiscal (não só as com flag
+  // emergencial — as 1.794 importadas da planilha não têm a flag e
+  // sumiam da tela; correção do "sumiu tudo" do v18)
   const filtroMinhas = ehGestor ? undefined
-    : equipe ? (os: OSCampo) => os.emergencial && os.fiscal === equipe.fiscal
+    : equipe ? (os: OSCampo) => os.fiscal === equipe.fiscal
     : meuExecutor ? (os: OSCampo) => os.executor === meuExecutor
     : undefined;
 
@@ -164,7 +167,7 @@ const App: React.FC = () => {
             aoEditar={(os) => { setEditando(os); setAba('nova'); }}
             aoMudar={recarregar}
             filtroMinhas={filtroMinhas}
-            rotuloMinhas={equipe ? `Emergenciais · fiscal ${equipe.fiscal}` : 'Minhas O.S.'}
+            rotuloMinhas={equipe ? `O.S. da zona · fiscal ${equipe.fiscal}` : 'Minhas O.S.'}
             restrito={!ehGestor && !!filtroMinhas}
             podeExcluir={ehGestor}
           />
