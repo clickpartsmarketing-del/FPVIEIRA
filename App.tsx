@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v24';
+const VERSAO = 'v25';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -64,6 +64,23 @@ const App: React.FC = () => {
   };
 
   useEffect(() => { if (sessao) recarregar(); }, [sessao]);
+
+  // TEMPO REAL: qualquer O.S. criada/alterada em qualquer celular
+  // atualiza todas as telas sozinha (debounce p/ não recarregar em rajada).
+  // Precisa do REALTIME-E-TIPO.sql rodado no banco; sem ele, nada quebra —
+  // o ↻ manual continua valendo.
+  useEffect(() => {
+    if (!sessao) return;
+    let t: any;
+    const ch = supabase
+      .channel('rt-os-campo')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'os_campo' }, () => {
+        clearTimeout(t);
+        t = setTimeout(recarregar, 1500);
+      })
+      .subscribe();
+    return () => { clearTimeout(t); supabase.removeChannel(ch); };
+  }, [sessao]);
 
   if (carregandoSessao) return <div className="min-h-screen flex items-center justify-center text-stone-400">Carregando…</div>;
   if (!sessao) return <LoginScreen />;

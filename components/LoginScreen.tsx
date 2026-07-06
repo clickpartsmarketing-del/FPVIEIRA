@@ -47,6 +47,7 @@ const LoginScreen: React.FC = () => {
             <input
               type="email" value={email} onChange={e => setEmail(e.target.value)} required
               placeholder="seu e-mail de acesso"
+              autoComplete="username" name="username" inputMode="email" autoCapitalize="none"
               className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-fpv-500 focus:ring-2 focus:ring-fpv-100 text-sm font-medium"
             />
           </div>
@@ -55,6 +56,7 @@ const LoginScreen: React.FC = () => {
             <input
               type="password" value={senha} onChange={e => setSenha(e.target.value)} required
               placeholder="senha"
+              autoComplete="current-password" name="password"
               className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-fpv-500 focus:ring-2 focus:ring-fpv-100 text-sm font-medium"
             />
           </div>

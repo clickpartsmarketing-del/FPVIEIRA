@@ -80,6 +80,19 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
   };
   useEffect(() => { carregar(); }, []);
 
+  // TEMPO REAL: pedido da equipe, saída, entrada ou devolução pinga na
+  // tela do João sem apertar nada (debounce contra rajadas)
+  useEffect(() => {
+    let t: any;
+    const bump = () => { clearTimeout(t); t = setTimeout(carregar, 1200); };
+    const ch = supabase.channel('rt-almox');
+    for (const tb of ['saida_material', 'solicitacao_material', 'estoque_item', 'entrada_material', 'ferramenta']) {
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: tb }, bump);
+    }
+    ch.subscribe();
+    return () => { clearTimeout(t); supabase.removeChannel(ch); };
+  }, []);
+
   // ===== saldo por item: contagem inicial + entradas − saídas (devolução
   // já entra negativa na saída, então somar de volta é automático) =====
   const somaPor = (rows: { descricao: string; quantidade: number }[]) => {

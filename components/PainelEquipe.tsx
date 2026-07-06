@@ -61,6 +61,19 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
   };
   useEffect(() => { carregarMaterial(); }, []);
 
+  // TEMPO REAL: quando o João separa o pedido ou registra retirada no
+  // nome da equipe, o botão RECEBI aparece aqui na hora
+  useEffect(() => {
+    let t: any;
+    const bump = () => { clearTimeout(t); t = setTimeout(carregarMaterial, 1200); };
+    const ch = supabase.channel(`rt-material-${cfg.prefixo}`);
+    for (const tb of ['solicitacao_material', 'saida_material']) {
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: tb }, bump);
+    }
+    ch.subscribe();
+    return () => { clearTimeout(t); supabase.removeChannel(ch); };
+  }, []);
+
   const enviarPedido = async () => {
     if (!itensPedido.trim()) { setMsgMat('Escreva os itens — um por linha, com quantidade.'); return; }
     const { error } = await supabase.from('solicitacao_material').insert([{
