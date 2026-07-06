@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Save, Mic, Camera, X, Loader2, Eraser, Siren, PackageMinus, Plus, Minus } from 'lucide-react';
-import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS, refDaOS } from '../types';
+import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS, TIPO_OPTIONS, refDaOS } from '../types';
 import { ESCOLAS } from '../data/escolas';
 import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
-import { VOZ_ATIVA, GESTORES, EQUIPES, medDoMes } from '../config';
+import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, medDoMes } from '../config';
 import { osService } from '../services/osService';
 
 const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
@@ -14,10 +14,12 @@ const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-�
 // como executor — "responsável preenchido automaticamente com o login"
 const vaziaPara = (usuario: string): OSCampo => {
   const equipe = EQUIPES[usuario];
-  const executorLogado = EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
+  const corretiva = CORRETIVA[usuario];
+  const executorLogado = corretiva?.executor ?? EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
   return {
     numero: null,
     emergencial: !!equipe,
+    tipo: equipe ? 'Emergencial' : 'Corretiva',
     unidade: '',
     fiscal: equipe?.fiscal ?? 'Wellington',
     classificacao: equipe ? 'Emergencial' : 'Normal',
@@ -38,6 +40,9 @@ interface Props {
 
 const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao }) => {
   const equipe = EQUIPES[usuario];
+  const corretiva = CORRETIVA[usuario];
+  // prefixo da numeração automática: L/M (equipes) ou G/C (corretiva)
+  const prefixoRef = equipe?.prefixo ?? corretiva?.prefixo;
   const ehGestor = GESTORES.includes(usuario);
   const [os, setOs] = useState<OSCampo>(() => vaziaPara(usuario));
   const [fotos, setFotos] = useState<File[]>([]);
@@ -131,9 +136,10 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     const materiais = [os.materiais.trim(), textoKit ? `[KIT] ${textoKit}` : ''].filter(Boolean).join('\n');
 
     const dados = { ...os, materiais, foto_urls: urls, numero: os.numero ? Number(os.numero) : null };
-    // equipe sem nº oficial → numeração da EQUIPE (L01/M01…), gerada no banco
-    const resultado = equipe
-      ? await osService.salvarEquipe(dados, equipe.prefixo)
+    // sem nº oficial → numeração automática da equipe/encarregado
+    // (L/M emergência · G/C corretiva), gerada no banco
+    const resultado = prefixoRef
+      ? await osService.salvarEquipe(dados, prefixoRef)
       : await osService.salvar(dados);
     setSalvando(false);
     if (!resultado.ok) { setMsg('Erro ao salvar: ' + (resultado.erro || 'verifique a conexão')); return; }
@@ -164,12 +170,23 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
   return (
     <form onSubmit={salvar} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="space-y-2">
         <h2 className="font-bold text-stone-900">{os.id ? `Editando O.S. ${refDaOS(os)}` : 'Registrar O.S. de campo'}</h2>
-        <label className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full cursor-pointer border ${os.emergencial ? 'bg-red-50 text-red-700 border-red-200' : 'bg-stone-50 text-stone-500 border-stone-200'}`}>
-          <input type="checkbox" checked={os.emergencial} onChange={e => campo('emergencial', e.target.checked)} className="hidden" />
-          <Siren size={14} /> EMERGENCIAL
-        </label>
+        {/* tipo da atividade (decisão Renan 06/07): 3 opções no lugar do
+            liga/desliga — emergencial continua acionando kit/prazos */}
+        <div className="flex gap-2">
+          {TIPO_OPTIONS.map(t => {
+            const ativo = (os.tipo ?? (os.emergencial ? 'Emergencial' : '')) === t;
+            const corAtivo = t === 'Emergencial' ? 'bg-red-600 text-white border-red-600' : 'bg-fpv-600 text-white border-fpv-600';
+            return (
+              <button key={t} type="button"
+                onClick={() => setOs(prev => ({ ...prev, tipo: t, emergencial: t === 'Emergencial' }))}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold px-2 py-2 rounded-full border ${ativo ? corAtivo : 'bg-stone-50 text-stone-500 border-stone-200'}`}>
+                {t === 'Emergencial' && <Siren size={13} />} {t.toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {equipe && !os.id && (
@@ -177,12 +194,17 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
           {equipe.apelido} · fiscal {equipe.fiscal} já preenchido · sem nº? o sistema gera o <b>{equipe.prefixo}-nº</b> na hora · medição vigente: <b>{medDoMes()}</b> (automática no fechamento)
         </p>
       )}
+      {corretiva && !os.id && (
+        <p className="text-[11px] text-stone-500 -mt-2">
+          {corretiva.executor} já preenchido como executor · sem nº? o sistema gera o <b>{corretiva.prefixo}-nº</b> na hora · medição vigente: <b>{medDoMes()}</b>
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Nº da O.S.</label>
           <input type="number" value={os.numero ?? ''} onChange={e => campo('numero', e.target.value ? Number(e.target.value) : null)}
-            placeholder={equipe ? `vazio = gera ${equipe.prefixo}-nº` : 'vazio = gera F-nº'}
+            placeholder={prefixoRef ? `vazio = gera ${prefixoRef}-nº` : 'vazio = gera F-nº'}
             className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         </div>
         <div>

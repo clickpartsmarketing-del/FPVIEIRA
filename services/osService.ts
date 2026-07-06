@@ -54,6 +54,12 @@ export const osService = {
       ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
     }
 
+    // sem 'tipo' (Emergencial/Corretiva/Preventiva) → tira e re-insere
+    if (error && /'tipo'/i.test(error.message)) {
+      delete base.tipo;
+      ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
+    }
+
     // sem 'area' → tira e re-insere
     if (error && /'area'/i.test(error.message)) {
       delete base.area;
@@ -70,6 +76,7 @@ export const osService = {
       delete p2.solicitado;
       delete p2.area;     // banco sem 'solicitado' também não tem 'area'
       delete p2.fict_ref; // nem a numeração de equipe
+      delete p2.tipo;     // nem o tipo de atividade
       const r2 = await supabase.from('os_campo').insert([p2]).select().single();
       return { ok: !r2.error, erro: r2.error?.message, os: r2.data as OSCampo };
     }

@@ -1,8 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Siren, AlertTriangle, Camera, Ruler, CheckCircle2, ArrowRight, Package, Send } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
-import { Equipe, medDoMes } from '../config';
+import { medDoMes } from '../config';
 import { supabase } from '../services/supabaseClient';
+
+// configuração do painel: equipe de emergência (filtra pela ZONA do
+// fiscal) ou encarregado corretivo (filtra pelo EXECUTOR)
+export interface PainelCfg {
+  titulo: string;
+  apelido: string;
+  prefixo: string;
+  membros: string[];
+  filtro: (os: OSCampo) => boolean;
+}
 
 // =============================================================
 // PAINEL DA EQUIPE DE EMERGÊNCIA — a zona do fiscal num relance:
@@ -26,13 +36,12 @@ interface Solicitacao {
 
 interface Props {
   lista: OSCampo[];
-  equipe: Equipe;
-  usuario: string;
+  cfg: PainelCfg;
   aoVerLista: () => void;
   aoNovaOS: () => void;
 }
 
-const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoNovaOS }) => {
+const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => {
   // ===== material: pedir ao almoxarifado + confirmar recebimento =====
   const [pedidoAberto, setPedidoAberto] = useState(false);
   const [itensPedido, setItensPedido] = useState('');
@@ -43,11 +52,11 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoN
 
   const carregarMaterial = async () => {
     const { data } = await supabase.from('solicitacao_material').select('*')
-      .eq('solicitante', equipe.apelido).order('criado_em', { ascending: false }).limit(6);
+      .eq('solicitante', cfg.apelido).order('criado_em', { ascending: false }).limit(6);
     if (data) setMeusPedidos(data as Solicitacao[]);
     // saídas do almoxarifado destinadas à equipe aguardando confirmação
     const { data: r } = await supabase.from('saida_material').select('*')
-      .eq('recebido', false).in('destinatario', [equipe.apelido, ...equipe.membros]).limit(20);
+      .eq('recebido', false).in('destinatario', [cfg.apelido, ...cfg.membros]).limit(20);
     if (r) setRetiradas(r);
   };
   useEffect(() => { carregarMaterial(); }, []);
@@ -55,7 +64,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoN
   const enviarPedido = async () => {
     if (!itensPedido.trim()) { setMsgMat('Escreva os itens — um por linha, com quantidade.'); return; }
     const { error } = await supabase.from('solicitacao_material').insert([{
-      solicitante: equipe.apelido, os_ref: osPedido || null, itens: itensPedido.trim()
+      solicitante: cfg.apelido, os_ref: osPedido || null, itens: itensPedido.trim()
     }]);
     if (error) { setMsgMat(/solicitacao_material/.test(error.message) ? '⚠️ O gestor precisa rodar o ALMOX-V2.sql primeiro.' : 'Erro: ' + error.message); return; }
     setMsgMat('📦 Pedido enviado ao almoxarifado!');
@@ -71,17 +80,17 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoN
     await supabase.from('saida_material').update({ recebido: true }).eq('id', r.id);
     carregarMaterial();
   };
-  const zona = lista.filter(o => o.fiscal === equipe.fiscal && o.status !== 'Cancelada');
+  const zona = lista.filter(o => cfg.filtro(o) && o.status !== 'Cancelada');
   // última numeração DA EQUIPE (spec do engenheiro: "no topo, qual foi a
   // última utilizada") — L/M-nº novo; cai pro F-nn legado se ainda não há
   const ultimaEquipe = lista.reduce((m, o) => {
-    if (!o.fict_ref || !o.fict_ref.startsWith(equipe.prefixo)) return m;
-    const n = parseInt(o.fict_ref.slice(equipe.prefixo.length), 10);
+    if (!o.fict_ref || !o.fict_ref.startsWith(cfg.prefixo)) return m;
+    const n = parseInt(o.fict_ref.slice(cfg.prefixo.length), 10);
     return isNaN(n) ? m : Math.max(m, n);
   }, 0);
   const ultimaF = lista.reduce((m, o) => Math.max(m, o.numero_fict || 0), 0);
   const chipUltima = ultimaEquipe > 0
-    ? `última ${equipe.prefixo}${String(ultimaEquipe).padStart(2, '0')}`
+    ? `última ${cfg.prefixo}${String(ultimaEquipe).padStart(2, '0')}`
     : ultimaF > 0 ? `última F-${ultimaF}` : '';
   const abertas = zona.filter(o => o.status !== 'Concluído');
   const estourou = (o: OSCampo) => {
@@ -112,7 +121,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoN
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Siren size={18} className="text-red-600" />
-        <h2 className="font-bold text-stone-900 flex-1">Emergência · zona {equipe.fiscal}</h2>
+        <h2 className="font-bold text-stone-900 flex-1">{cfg.titulo}</h2>
         <span className="text-[11px] font-bold text-stone-400">{medDoMes()} vigente</span>
         {chipUltima && (
           <span className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-full px-2 py-0.5" title="última numeração usada pela equipe (a próxima o sistema gera sozinho)">
@@ -122,7 +131,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoN
       </div>
 
       <div className="grid grid-cols-4 gap-2">
-        <Kpi n={abertas.length} rot="abertas na zona" />
+        <Kpi n={abertas.length} rot="abertas" />
         <Kpi n={estouradas.length} rot="prazo estourado" alerta />
         <Kpi n={semFoto.length} rot="sem foto" alerta />
         <Kpi n={concluidas7d.length} rot="concluídas 7d" />
@@ -138,7 +147,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, usuario, aoVerLista, aoN
 
       {abertas.length > 0 && (
         <div className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-2">
-          <Ruler size={14} /> {abertas.length} O.S. em aberto na zona — sem foto e memória de cálculo, NÃO conclui.
+          <Ruler size={14} /> {abertas.length} O.S. em aberto — sem foto e memória de cálculo, NÃO conclui.
           {semMemoria.length > 0 && <> ({semMemoria.length} sem memória)</>}
         </div>
       )}

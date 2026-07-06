@@ -3,7 +3,7 @@ import { MessageCircle, ClipboardPlus, ListChecks, FileSignature, LogOut, Refres
 import { supabase } from './services/supabaseClient';
 import { osService } from './services/osService';
 import { OSCampo, EXECUTOR_OPTIONS } from './types';
-import { VOZ_ATIVA, GESTORES, ALMOX, EQUIPES } from './config';
+import { VOZ_ATIVA, GESTORES, ALMOX, EQUIPES, CORRETIVA } from './config';
 import LoginScreen from './components/LoginScreen';
 import ChatOS from './components/ChatOS';
 import NovaOS from './components/NovaOS';
@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v23';
+const VERSAO = 'v24';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -53,7 +53,7 @@ const App: React.FC = () => {
     if (u && !jaDirecionou.current) {
       if (GESTORES.includes(u)) { jaDirecionou.current = true; setAba('gestao'); }
       else if (ALMOX.includes(u)) { jaDirecionou.current = true; setAba('almox'); }
-      else if (EQUIPES[u]) { jaDirecionou.current = true; setAba('painel'); }
+      else if (EQUIPES[u] || CORRETIVA[u]) { jaDirecionou.current = true; setAba('painel'); }
     }
   }, [sessao]);
 
@@ -74,11 +74,12 @@ const App: React.FC = () => {
   const soAlmox = ALMOX.includes(usuario) && !ehGestor;
   const veAlmox = ALMOX.includes(usuario) || ehGestor;
   const equipe = EQUIPES[usuario];
+  const corretiva = CORRETIVA[usuario];
   // "responsabilidade do autor do painel": encarregado vê as O.S. em
   // que é o EXECUTOR; equipe de emergência vê as emergenciais do seu
   // FISCAL (zona) — decisão Renan 05/07
   const meuExecutor = ehGestor || equipe ? undefined
-    : EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
+    : corretiva?.executor ?? EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
   // equipe vê TODAS as O.S. da zona do seu fiscal (não só as com flag
   // emergencial — as 1.794 importadas da planilha não têm a flag e
   // sumiam da tela; correção do "sumiu tudo" do v18)
@@ -86,6 +87,17 @@ const App: React.FC = () => {
     : equipe ? (os: OSCampo) => os.fiscal === equipe.fiscal
     : meuExecutor ? (os: OSCampo) => os.executor === meuExecutor
     : undefined;
+  // painel de campo: equipes de emergência (por zona) E corretiva (por
+  // executor) — "tudo que o emergencial tem" (decisão Renan 06/07)
+  const painelCfg = equipe ? {
+    titulo: `Emergência · zona ${equipe.fiscal}`,
+    apelido: equipe.apelido, prefixo: equipe.prefixo, membros: equipe.membros,
+    filtro: (os: OSCampo) => os.fiscal === equipe.fiscal,
+  } : corretiva ? {
+    titulo: `Corretiva · ${corretiva.executor}`,
+    apelido: corretiva.apelido, prefixo: corretiva.prefixo, membros: [corretiva.executor],
+    filtro: (os: OSCampo) => os.executor === corretiva.executor,
+  } : null;
 
   const trocarSenha = async () => {
     if (novaSenha.length < 6) { setSenhaMsg('A senha precisa de pelo menos 6 caracteres.'); return; }
@@ -154,8 +166,8 @@ const App: React.FC = () => {
       )}
 
       <main className="max-w-3xl mx-auto p-4">
-        {aba === 'painel' && equipe && (
-          <PainelEquipe lista={lista} equipe={equipe} usuario={usuario} aoVerLista={() => setAba('lista')} aoNovaOS={() => setAba('nova')} />
+        {aba === 'painel' && painelCfg && (
+          <PainelEquipe lista={lista} cfg={painelCfg} aoVerLista={() => setAba('lista')} aoNovaOS={() => setAba('nova')} />
         )}
         {VOZ_ATIVA && aba === 'chat' && !soAlmox && <ChatOS aoSalvar={recarregar} />}
         {aba === 'nova' && !soAlmox && (
@@ -192,7 +204,7 @@ const App: React.FC = () => {
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-stone-200 px-4 py-2 print-hidden">
         <div className="max-w-3xl mx-auto flex gap-1">
-          {equipe && <TabBtn id="painel" icon={LayoutDashboard} label="Painel" />}
+          {painelCfg && <TabBtn id="painel" icon={LayoutDashboard} label="Painel" />}
           {VOZ_ATIVA && !soAlmox && <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />}
           {!soAlmox && <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />}
           {!soAlmox && <TabBtn id="lista" icon={ListChecks} label={filtroMinhas ? 'Minhas O.S.' : `O.S. (${lista.length})`} />}

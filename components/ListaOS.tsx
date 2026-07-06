@@ -190,6 +190,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                   <div className="text-xs text-stone-500 truncate">{os.solicitado || os.servico || os.materiais || '—'}</div>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${pillCor(os.status)}`}>{os.status}{os.medicao ? ' · ' + os.medicao : ''}</span>
+                    {os.tipo && <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${os.tipo === 'Emergencial' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-stone-50 text-stone-500 border-stone-200'}`}>{os.tipo}</span>}
                     {medicaoFechada(os) && <span className="text-[11px] font-bold border rounded-full px-2 py-0.5 bg-stone-100 text-stone-500 border-stone-200">🔒 medição fechada</span>}
                     {alerta && <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${alerta.cls}`}>{alerta.txt}</span>}
                     {os.executor && <span className="text-[11px] text-stone-500">{os.executor}</span>}

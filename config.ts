@@ -28,6 +28,14 @@ export const EQUIPES: Record<string, Equipe> = {
   emergencia2: { fiscal: 'Wellington', membros: ['Wellington', 'Miqueias', 'Patrick'], prefixo: 'M', apelido: 'Equipe Miqueias' },
 };
 
+// Encarregados da CORRETIVA: painel próprio (igual ao emergencial, mas
+// filtrado pelo EXECUTOR) e numeração própria (G01 Gilson / C01 Carlos)
+export interface Corretiva { executor: string; prefixo: string; apelido: string; }
+export const CORRETIVA: Record<string, Corretiva> = {
+  gilson: { executor: 'Gilson', prefixo: 'G', apelido: 'Gilson' },
+  carlosalberto: { executor: 'Carlos Alberto', prefixo: 'C', apelido: 'Carlos Alberto' },
+};
+
 // Medição vigente pelo calendário: julho/2026 = MED 8, agosto = MED 9…
 // (a 7ª fechou em junho/26 — âncora confirmada pelo Renan em 05/07)
 export const medDoMes = (d = new Date()) =>

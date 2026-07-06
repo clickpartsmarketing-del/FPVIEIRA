@@ -4,6 +4,7 @@ export interface OSCampo {
   numero_fict?: number | null; // legado F-77/F-78 (sequência global antiga)
   fict_ref?: string | null;    // numeração POR EQUIPE: L01, L02… / M01, M02…
   emergencial: boolean;
+  tipo?: string | null; // Emergencial | Corretiva | Preventiva (spec Renan 06/07)
   unidade: string;
   fiscal: string;
   classificacao: string;
@@ -28,6 +29,7 @@ export const refDaOS = (o: Pick<OSCampo, 'numero' | 'fict_ref' | 'numero_fict'>)
   o.numero != null ? String(o.numero)
     : (o.fict_ref || (o.numero_fict ? `F-${o.numero_fict}` : 'S/Nº'));
 
+export const TIPO_OPTIONS = ['Emergencial', 'Corretiva', 'Preventiva'];
 export const STATUS_OPTIONS = ['Pendente', 'Executando', 'Concluído', 'Assinatura', 'Material', 'Cancelada'];
 export const FISCAL_OPTIONS = ['Wellington', 'Renato', 'Central'];
 export const CLASSIF_OPTIONS = ['Emergencial', 'Urgente', 'Normal'];
