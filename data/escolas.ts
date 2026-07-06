@@ -1,3 +1,90 @@
+// Zona/fiscal de cada unidade (mesmo de-para do fluxo n8n do e-mail)
+export const ZONA_ESCOLA: [string, string][] = [
+  ["C.B.F Centro de Treinamento Gilson Zarour", "Central"],
+  ["Campo Society Cidade Beira Mar", "Central"],
+  ["Campo Society Gilberto Cabral", "Central"],
+  ["Campo Society Heiltor M. Pereira", "Renato"],
+  ["CEMADA", "Renato"],
+  ["CEMAEE - Centro M. de Atentimento Edu. Especializado", "Central"],
+  ["CIEP Mestre Marçal Municipalizado", "Renato"],
+  ["Creche Dona Cota", "Renato"],
+  ["Creche Dona Lina", "Wellington"],
+  ["Creche M. Almira Rosa de Souza \"Dona Cota\"", "Renato"],
+  ["Creche M. Dona Senhorinha", "Renato"],
+  ["Creche M. Márcia Lustosa Machado", "Renato"],
+  ["Creche M. Maria Lina Paixão Fontes Coutinho", "Wellington"],
+  ["Creche M. Maria Rosa Ribeiro Pinheiro", "Renato"],
+  ["Creche M. Valdira Flausino Rodrigues", "Renato"],
+  ["Escola M. A. Carlos Maurício Franco", "Wellington"],
+  ["Escola M. Alberto Jorge", "Wellington"],
+  ["Escola M. Alzir David Pereira", "Renato"],
+  ["Escola M. América Abdalla", "Renato"],
+  ["Escola M. Ary Gomes de Marins", "Wellington"],
+  ["Escola M. Célio Sarzedas", "Renato"],
+  ["Escola M. Cláudio Ribeiro", "Renato"],
+  ["Escola M. Dom Bosco", "Renato"],
+  ["Escola M. Elson Pinheiro", "Renato"],
+  ["Escola M. Enedina Fidélis Moreira", "Wellington"],
+  ["Escola M. Ernestina Jorge Pereira", "Renato"],
+  ["Escola M. Fany Batista Esteves", "Renato"],
+  ["Escola M. Fazenda da Praia", "Wellington"],
+  ["Escola M. Fazendas Reunidas Atlântica", "Wellington"],
+  ["Escola M. Francisco de Assis Medeiros Rangel", "Renato"],
+  ["Escola M. Henrique Sarzedas", "Wellington"],
+  ["Escola M. Inayá Moraes D'Couto", "Wellington"],
+  ["Escola M. Jerônymo Mendes da Costa", "Renato"],
+  ["Escola M. João Batista Gomes da Cruz", "Renato"],
+  ["Escola M. João Bento Duarte Neto", "Renato"],
+  ["Escola M. José de Oliveira Martins", "Wellington"],
+  ["Escola M. José Luiz de Lemos", "Wellington"],
+  ["Escola M. Jovenil Bastos da Silva", "Renato"],
+  ["Escola M. Maria da Penha de Oliveira", "Renato"],
+  ["Escola M. Maria Teixeira de Paula", "Renato"],
+  ["Escola M. Marinete Coelho Souza", "Wellington"],
+  ["Escola M. Mônica de Andrade Ribeiro", "Wellington"],
+  ["Escola M. Nadir da Silva Salvador", "Wellington"],
+  ["Escola M. Neli Aparecida Tâmara Luiz", "Renato"],
+  ["Escola M. Nelzir Pereira Mello", "Renato"],
+  ["Escola M. Nilton Balthazar", "Wellington"],
+  ["Escola M. Ondina Pinto Marcondes", "Wellington"],
+  ["Escola M. Padre José Dilson Dórea", "Wellington"],
+  ["Escola M. Paulo Pinheiro", "Renato"],
+  ["Escola M. Pedro Moreira dos Santos", "Renato"],
+  ["Escola M. Rio das Ostras", "Renato"],
+  ["Escola M. Rocha Leão", "Wellington"],
+  ["Escola M. Rosângela Duarte Faria", "Wellington"],
+  ["Escola M. Sebastião Loubach", "Renato"],
+  ["Escola M. Senhorinha de Oliveira Gomes", "Wellington"],
+  ["Escola M. Simar Machado Sodré", "Wellington"],
+  ["Escola M. Solange Viana", "Wellington"],
+  ["Estádio Amaro Mota", "Central"],
+  ["Estádio Emília Rosa Guimarães", "Central"],
+  ["Estádio Gilberto Mendonça dos Santos", "Central"],
+  ["Estádio Julieta Viana", "Central"],
+  ["IMERO", "Renato"],
+  ["Instituto José Eduardo Machado de Oliveira", "Central"],
+  ["NUGEPE", "Central"],
+  ["Praça do Skate", "Central"],
+  ["SEMEDE", "Central"],
+  ["SUPRIMENTOS", "Wellington"],
+  ["Vila Olímpica", "Central"],
+];
+
+const normZ = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+// fiscal da zona pela escola — match exato normalizado, depois por
+// contenção; sem match = Central (gestão corrige na edição)
+export const fiscalDaEscola = (unidade: string): string => {
+  const alvo = normZ(unidade);
+  if (!alvo) return 'Central';
+  for (const [nome, zona] of ZONA_ESCOLA) if (normZ(nome) === alvo) return zona;
+  for (const [nome, zona] of ZONA_ESCOLA) {
+    const n = normZ(nome);
+    if (n.includes(alvo) || alvo.includes(n)) return zona;
+  }
+  return 'Central';
+};
+
 export const ESCOLAS = [
   "Escola M. Nilton Balthazar",
   "Escola M. Nadir da Silva Salvador",

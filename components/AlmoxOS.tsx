@@ -4,7 +4,7 @@ import { supabase } from '../services/supabaseClient';
 import { osService } from '../services/osService';
 import { OSCampo, refDaOS, EXECUTOR_OPTIONS } from '../types';
 import { MATERIAIS, UNIDADES, ORIGENS } from '../data/materiais';
-import { ESCOLAS } from '../data/escolas';
+import { ESCOLAS, fiscalDaEscola } from '../data/escolas';
 
 // =============================================================
 // ALMOXARIFADO v2 (spec engenheiro REV 000) — painel do João:
@@ -140,14 +140,49 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
   // um destinatário confirma o recebimento no login dele (spec)
   const DESTINATARIOS = ['Equipe Leandro', 'Equipe Miqueias', ...EXECUTOR_OPTIONS];
 
+  // O JOÃO É O CONTROLADOR DOS EMERGENCIAIS (Renan, 1º teste 06/07):
+  // a equipe passa no balcão ANTES de registrar a O.S. — então a
+  // fictícia nasce AQUI: prefixo pela equipe/encarregado que retira
+  const PREFIXO_DEST: Record<string, string> = {
+    'equipe leandro': 'L', 'leandro': 'L', 'renato': 'L',
+    'equipe miqueias': 'M', 'miqueias': 'M', 'patrick': 'M', 'wellington': 'M',
+    'gilson': 'G', 'carlos alberto': 'C',
+  };
+  const [gerarOS, setGerarOS] = useState(false);
+
   const salvarSaida = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!saida.descricao.trim()) { setMsg('Escolha o material.'); return; }
     if (!saida.quantidade || saida.quantidade <= 0) { setMsg('Quantidade precisa ser maior que zero.'); return; }
+    const dest = (saida.destinatario || '').trim();
+    let osRef = (saida.os_ref || '').trim();
+
+    // gera a O.S. EMERGENCIAL no balcão e já vincula a saída a ela
+    if (gerarOS && !osRef) {
+      if (!saida.escola.trim()) { setMsg('Para gerar a O.S. informe a ESCOLA.'); return; }
+      if (!dest) { setMsg('Para gerar a O.S. informe QUEM RETIROU (é o executor dela).'); return; }
+      setSalvando(true); setMsg('');
+      const executor = EXECUTOR_OPTIONS.find(x => norm(x) === norm(dest)) || '';
+      const novaOS: any = {
+        numero: null, emergencial: true, tipo: 'Emergencial',
+        unidade: saida.escola, fiscal: fiscalDaEscola(saida.escola),
+        classificacao: 'Emergencial', entrada: hoje(), conclusao: null,
+        executor, status: 'Executando', medicao: '',
+        solicitado: saida.obs || 'Emergência atendida no almoxarifado',
+        servico: '', materiais: `${saida.quantidade} ${saida.unidade} ${saida.descricao}`,
+        memoria_calculo: '', foto_urls: []
+      };
+      const prefixo = PREFIXO_DEST[norm(dest)];
+      const r = prefixo ? await osService.salvarEquipe(novaOS, prefixo) : await osService.salvar(novaOS);
+      if (!r.ok || !r.os) { setSalvando(false); setMsg('Erro ao gerar a O.S.: ' + (r.erro || '?')); return; }
+      osRef = refDaOS(r.os);
+      setSalvando(false);
+    }
+
     setSalvando(true); setMsg('');
-    const payload: any = { ...saida };
+    const payload: any = { ...saida, os_ref: osRef, destinatario: dest || null };
     delete payload.id; delete payload.criado_em;
-    payload.recebido = payload.destinatario ? false : null;
+    payload.recebido = dest ? false : null;
     let { error } = await supabase.from('saida_material').insert([payload]);
     // banco sem as colunas novas (ALMOX-V2.sql pendente) → salva sem elas
     if (error && /obs|destinatario|recebido/i.test(error.message)) {
@@ -156,8 +191,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
     }
     setSalvando(false);
     if (error) { setMsg('Erro: ' + error.message); return; }
-    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${saida.os_ref ? ' → O.S. ' + saida.os_ref : ''}${saida.destinatario ? ` · aguardando ✓ de ${saida.destinatario}` : ''}`);
-    setSaida(p => ({ ...SAIDA_VAZIA, data: p.data, escola: p.escola, os_ref: p.os_ref, origem: p.origem }));
+    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${osRef ? ' → O.S. ' + osRef : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}`);
+    setGerarOS(false);
+    setSaida(p => ({ ...SAIDA_VAZIA, data: p.data, escola: p.escola, os_ref: osRef, origem: p.origem }));
     carregar();
   };
 
@@ -401,7 +437,13 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
             </div>
             <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1"><Link2 size={11} className="inline mr-1" />O.S. vinculada (o coração do cruzamento)</label>
               <input list="refs-os" value={saida.os_ref} onChange={e => escolheuOS(e.target.value)} placeholder="nº oficial, L/M-nº ou F-nn — escolher puxa a escola" className="w-full border-2 border-fpv-100 rounded-lg px-3 py-2.5 text-sm bg-fpv-50/40 outline-none focus:border-fpv-500" />
-              <datalist id="refs-os">{refsOS.map(r => <option key={r.rotulo} value={r.ref}>{r.rotulo}</option>)}</datalist></div>
+              <datalist id="refs-os">{refsOS.map(r => <option key={r.rotulo} value={r.ref}>{r.rotulo}</option>)}</datalist>
+              {!(saida.os_ref || '').trim() && (
+                <label className={`mt-2 flex items-center gap-2 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer border ${gerarOS ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                  <input type="checkbox" checked={gerarOS} onChange={e => setGerarOS(e.target.checked)} className="hidden" />
+                  <Siren size={14} /> {gerarOS ? 'VAI GERAR a O.S. emergencial ao salvar (escola + quem retirou obrigatórios)' : 'Emergência SEM O.S.? Toque aqui — o sistema gera a O.S. e vincula'}
+                </label>
+              )}</div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Escola / destino</label>
                 <input list="escolas-almox" value={saida.escola} onChange={e => setSaida(p => ({ ...p, escola: e.target.value }))} className={inputCls} />

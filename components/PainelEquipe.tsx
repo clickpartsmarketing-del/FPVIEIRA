@@ -54,10 +54,15 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
     const { data } = await supabase.from('solicitacao_material').select('*')
       .eq('solicitante', cfg.apelido).order('criado_em', { ascending: false }).limit(6);
     if (data) setMeusPedidos(data as Solicitacao[]);
-    // saídas do almoxarifado destinadas à equipe aguardando confirmação
+    // saídas do almoxarifado aguardando confirmação — match do destinatário
+    // TOLERANTE (1º teste real: João digitou "Gilson " com espaço no fim)
     const { data: r } = await supabase.from('saida_material').select('*')
-      .eq('recebido', false).in('destinatario', [cfg.apelido, ...cfg.membros]).limit(20);
-    if (r) setRetiradas(r);
+      .eq('recebido', false).order('criado_em', { ascending: false }).limit(50);
+    if (r) {
+      const nrm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+      const meus = [cfg.apelido, ...cfg.membros].map(nrm);
+      setRetiradas(r.filter((s: any) => meus.includes(nrm(s.destinatario))));
+    }
   };
   useEffect(() => { carregarMaterial(); }, []);
 
