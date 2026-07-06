@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v33';
+const VERSAO = 'v34';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -206,7 +206,7 @@ const App: React.FC = () => {
             podeExcluir={ehGestor}
           />
         )}
-        {aba === 'almox' && veAlmox && <AlmoxOS listaOS={lista} />}
+        {aba === 'almox' && veAlmox && <AlmoxOS listaOS={lista} ehGestor={ehGestor} />}
         {aba === 'gestao' && (
           <Gestao
             lista={lista}

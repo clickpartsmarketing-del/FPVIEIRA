@@ -46,7 +46,7 @@ const ENTRADA_VAZIA: Entrada = { data: hoje(), descricao: '', quantidade: 1, uni
 
 type SubAba = 'stats' | 'saida' | 'cadastro' | 'estoque' | 'ferramentas' | 'solicitacoes';
 
-const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
+const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS, ehGestor = false }) => {
   const [sub, setSub] = useState<SubAba>('stats');
   const [saida, setSaida] = useState<Saida>({ ...SAIDA_VAZIA });
   const [saidas, setSaidas] = useState<Saida[]>([]);
@@ -173,6 +173,8 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
     if (!saida.descricao.trim()) { setMsg('Escolha o material.'); return; }
     if (!saida.quantidade || saida.quantidade <= 0) { setMsg('Quantidade precisa ser maior que zero.'); return; }
     const dest = (saida.destinatario || '').trim();
+    // REV 001 do gestor: TODA saída tem retirante — é ele que confirma no login
+    if (!dest) { setMsg('Informe QUEM RETIROU — regra do gestor: toda saída tem confirmação no login de quem levou.'); return; }
     let osRef = (saida.os_ref || '').trim();
 
     // gera a O.S. EMERGENCIAL no balcão e já vincula a saída a ela
@@ -265,6 +267,29 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
   const receberFerr = async (f: Ferramenta) => {
     await supabase.from('ferramenta').update({ status: 'ESTOQUE', com_quem: null, obra: null, desde: null }).eq('id', f.id);
     carregar();
+  };
+
+  // REV 001 do gestor: João edita descrição/unidade/mínimo; a CONTAGEM
+  // (saldo inicial) só a gestão ajusta — separação de funções
+  const editarItem = async (i: ItemEstoque) => {
+    const desc = prompt('Descrição do item:', i.descricao); if (desc == null || !desc.trim()) return;
+    const un = prompt('Unidade (UND, M, KG…):', i.unidade) || i.unidade;
+    const minS = prompt('Quantidade MÍNIMA (alerta):', String(i.qtd_minima)); if (minS == null) return;
+    const min = parseFloat(minS.replace(',', '.'));
+    const { error } = await supabase.from('estoque_item')
+      .update({ descricao: desc.trim(), unidade: un.trim(), qtd_minima: isNaN(min) ? i.qtd_minima : min })
+      .eq('id', i.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`✏️ ${desc.trim()} atualizado.`); carregar();
+  };
+  const ajustarContagem = async (i: ItemEstoque) => {
+    const s = prompt(`CONTAGEM física de "${i.descricao}" (ajuste de GESTÃO — atual: ${i.saldo_inicial}):`, String(i.saldo_inicial));
+    if (s == null) return;
+    const v = parseFloat(s.replace(',', '.'));
+    if (isNaN(v) || v < 0) { setMsg('Valor inválido.'); return; }
+    const { error } = await supabase.from('estoque_item').update({ saldo_inicial: v }).eq('id', i.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`🧮 Contagem de ${i.descricao} ajustada para ${v} (gestão).`); carregar();
   };
 
   const marcarSeparado = async (q: Solicitacao) => {
@@ -572,6 +597,12 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
                   <b className={`tabular-nums ${s <= 0 ? 'text-red-600' : 'text-stone-900'}`}>{s} {i.unidade}</b>
                   {i.qtd_minima > 0 && <span className="text-[10px] text-stone-400">mín {i.qtd_minima}</span>}
                   {nv && <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${nv.cls}`}>{nv.rot}</span>}
+                  <button onClick={() => editarItem(i)} title="Editar descrição/unidade/mínimo"
+                    className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
+                  {ehGestor && (
+                    <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (só gestão)"
+                      className="text-[10px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">🧮</button>
+                  )}
                 </div>
               );
             })}
@@ -589,18 +620,39 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
             <button onClick={criarFerramenta} className="bg-fpv-500 hover:bg-fpv-600 text-white font-bold px-4 rounded-xl text-sm">＋</button>
           </div>
           {ferramentas.length === 0 && <p className="text-sm text-stone-400 text-center py-4">Nenhuma ferramenta cadastrada.</p>}
-          <div className="space-y-1.5">
-            {ferramentas.map(f => (
+          {/* REV 001 do gestor: listagem POR RESPONSÁVEL (tópicos) */}
+          {(() => {
+            const linha = (f: Ferramenta) => (
               <div key={f.id} className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${f.status === 'EM CAMPO' ? 'border-amber-200 bg-amber-50/50' : 'border-stone-100'}`}>
                 <span className="flex-1 min-w-0 truncate"><b>{f.quantidade > 1 ? f.quantidade + '× ' : ''}{f.descricao}</b>
-                  {f.status === 'EM CAMPO' && <span className="text-[11px] text-amber-800"> · com <b>{f.com_quem}</b>{f.obra ? ` em ${f.obra}` : ''}{f.obs ? ` · ${f.obs}` : ''}{f.desde ? ` desde ${f.desde.split('-').reverse().slice(0, 2).join('/')}` : ''}</span>}
+                  {f.status === 'EM CAMPO' && <span className="text-[11px] text-amber-800">{f.obra ? ` · ${f.obra}` : ''}{f.obs ? ` · ${f.obs}` : ''}{f.desde ? ` · desde ${f.desde.split('-').reverse().slice(0, 2).join('/')}` : ''}</span>}
                 </span>
                 {f.status === 'ESTOQUE'
                   ? <button onClick={() => entregarFerr(f)} className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-3 py-1">entregar →</button>
                   : <button onClick={() => receberFerr(f)} className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-3 py-1">← voltou</button>}
               </div>
-            ))}
-          </div>
+            );
+            const emCampo = ferramentas.filter(f => f.status === 'EM CAMPO');
+            const noEstoque = ferramentas.filter(f => f.status !== 'EM CAMPO');
+            const grupos: Record<string, Ferramenta[]> = {};
+            for (const f of emCampo) { const k = (f.com_quem || 'Sem responsável').trim(); (grupos[k] = grupos[k] || []).push(f); }
+            return (
+              <div className="space-y-3">
+                {Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0])).map(([quem, fs]) => (
+                  <div key={quem}>
+                    <div className="text-xs font-bold text-amber-800 mb-1.5">🧰 {quem} <span className="font-medium text-amber-600">({fs.reduce((t, f) => t + Number(f.quantidade || 1), 0)} item(ns) em campo)</span></div>
+                    <div className="space-y-1.5">{fs.map(linha)}</div>
+                  </div>
+                ))}
+                {noEstoque.length > 0 && (
+                  <div>
+                    <div className="text-xs font-bold text-stone-500 mb-1.5">📦 No estoque ({noEstoque.length})</div>
+                    <div className="space-y-1.5">{noEstoque.map(linha)}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

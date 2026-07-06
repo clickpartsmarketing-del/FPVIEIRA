@@ -46,6 +46,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
   const [pedidoAberto, setPedidoAberto] = useState(false);
   const [itensPedido, setItensPedido] = useState('');
   const [osPedido, setOsPedido] = useState('');
+  const [membroPedido, setMembroPedido] = useState(''); // REV 001: quem da equipe pede
   const [meusPedidos, setMeusPedidos] = useState<Solicitacao[]>([]);
   const [retiradas, setRetiradas] = useState<any[]>([]);
   const [msgMat, setMsgMat] = useState('');
@@ -53,7 +54,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
   const jaAbriuSozinho = React.useRef(false);
   const carregarMaterial = async () => {
     const { data } = await supabase.from('solicitacao_material').select('*')
-      .eq('solicitante', cfg.apelido).order('criado_em', { ascending: false }).limit(6);
+      .like('solicitante', `${cfg.apelido}%`).order('criado_em', { ascending: false }).limit(6);
     if (data) setMeusPedidos(data as Solicitacao[]);
     // saídas do almoxarifado aguardando confirmação — match do destinatário
     // TOLERANTE (1º teste real: João digitou "Gilson " com espaço no fim)
@@ -92,14 +93,17 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
   const enviarPedido = async () => {
     if (enviandoRef.current) return; // anti duplo-toque
     if (!itensPedido.trim()) { setMsgMat('Escreva os itens — um por linha, com quantidade.'); return; }
+    // REV 001 do gestor: o pedido identifica a PESSOA, não só a equipe
+    if (cfg.membros.length > 1 && !membroPedido) { setMsgMat('Toque em QUEM está pedindo (botões acima).'); return; }
     enviandoRef.current = true;
+    const solicitante = membroPedido ? `${cfg.apelido} · ${membroPedido}` : cfg.apelido;
     const { error } = await supabase.from('solicitacao_material').insert([{
-      solicitante: cfg.apelido, os_ref: osPedido || null, itens: itensPedido.trim()
+      solicitante, os_ref: osPedido || null, itens: itensPedido.trim()
     }]);
     enviandoRef.current = false;
     if (error) { setMsgMat(/solicitacao_material/.test(error.message) ? '⚠️ O gestor precisa rodar o ALMOX-V2.sql primeiro.' : 'Erro: ' + error.message); return; }
     setMsgMat('📦 Pedido enviado ao almoxarifado!');
-    setItensPedido(''); setOsPedido(''); setPedidoAberto(false);
+    setItensPedido(''); setOsPedido(''); setMembroPedido(''); setPedidoAberto(false);
     carregarMaterial();
   };
 
@@ -234,6 +238,16 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
 
         {pedidoAberto && (
           <div className="space-y-2 pt-1">
+            {cfg.membros.length > 1 && (
+              <div className="flex gap-2 flex-wrap">
+                {cfg.membros.map(m => (
+                  <button key={m} type="button" onClick={() => setMembroPedido(m)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-bold ${membroPedido === m ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-600 border-stone-200'}`}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
             <textarea value={itensPedido} onChange={e => setItensPedido(e.target.value)} rows={3}
               placeholder={'um item por linha, com quantidade:\n2 UND SIFÃO\n10 M FIO 2,5MM'}
               className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 resize-y" />
