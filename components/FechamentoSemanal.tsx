@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Printer, FileSignature } from 'lucide-react';
-import { OSCampo } from '../types';
+import { OSCampo, refDaOS } from '../types';
 
 interface Props { lista: OSCampo[]; }
 
@@ -60,7 +60,7 @@ const FechamentoSemanal: React.FC<Props> = ({ lista }) => {
               </div>
               <div className="text-right">
                 <div className="text-[11px] font-bold uppercase text-stone-400">Ordem de Serviço</div>
-                <div className="text-2xl font-black text-stone-900 tabular-nums">{os.numero ?? (os.numero_fict ? `F-${os.numero_fict}` : 'S/Nº')}</div>
+                <div className="text-2xl font-black text-stone-900 tabular-nums">{refDaOS(os)}</div>
                 {os.emergencial && <div className="text-[11px] font-bold text-red-600 uppercase">Emergencial</div>}
               </div>
             </div>

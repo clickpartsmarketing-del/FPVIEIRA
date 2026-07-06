@@ -44,22 +44,32 @@ export const osService = {
     // insert devolve a linha gravada — o trigger do banco atribui o F-nº
     let { data, error } = await supabase.from('os_campo').insert([payload]).select().single();
 
-    // resiliência: banco sem a coluna 'area' → tira e re-insere
+    // resiliência a colunas que ainda não existem no banco (SQL pendente):
+    // vai tirando a coluna apontada no erro e re-inserindo, em cadeia
+    let base: any = { ...payload };
+
+    // sem 'fict_ref' (numeração de equipe) → tira; sai F-nn do trigger
+    if (error && /fict_ref/i.test(error.message) && !/duplicate|unique/i.test(error.message)) {
+      delete base.fict_ref;
+      ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
+    }
+
+    // sem 'area' → tira e re-insere
     if (error && /'area'/i.test(error.message)) {
-      const pa: any = { ...payload };
-      delete pa.area;
-      ({ data, error } = await supabase.from('os_campo').insert([pa]).select().single());
+      delete base.area;
+      ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
     }
 
     // resiliência: se o banco ainda não tem a coluna 'solicitado',
     // funde o pedido do fiscal dentro do serviço e salva mesmo assim
     if (error && /solicitado/i.test(error.message)) {
-      const p2: any = { ...payload };
+      const p2: any = { ...base };
       if (p2.solicitado) {
         p2.servico = `[FISCAL PEDIU] ${p2.solicitado} | [EXECUTADO] ${p2.servico || ''}`.trim();
       }
       delete p2.solicitado;
-      delete p2.area; // banco sem 'solicitado' também não tem 'area'
+      delete p2.area;     // banco sem 'solicitado' também não tem 'area'
+      delete p2.fict_ref; // nem a numeração de equipe
       const r2 = await supabase.from('os_campo').insert([p2]).select().single();
       return { ok: !r2.error, erro: r2.error?.message, os: r2.data as OSCampo };
     }
@@ -70,6 +80,36 @@ export const osService = {
   async excluir(id: number): Promise<boolean> {
     const { error } = await supabase.from('os_campo').delete().eq('id', id);
     return !error;
+  },
+
+  // NUMERAÇÃO POR EQUIPE (L01/M01…): calcula o próximo da equipe; o índice
+  // único do banco derruba empate de 2 celulares e o salvarEquipe re-tenta.
+  // Devolve null se a coluna fict_ref ainda não existe (fallback = F-nn).
+  async proximaRefEquipe(prefixo: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('os_campo')
+      .select('fict_ref')
+      .like('fict_ref', `${prefixo}%`);
+    if (error) return /fict_ref/i.test(error.message) ? null : `${prefixo}01`;
+    let maior = 0;
+    for (const r of (data as { fict_ref: string }[] | null) || []) {
+      const n = parseInt((r.fict_ref || '').slice(prefixo.length), 10);
+      if (!isNaN(n) && n > maior) maior = n;
+    }
+    return `${prefixo}${String(maior + 1).padStart(2, '0')}`;
+  },
+
+  // Salva O.S. NOVA da equipe com a ref L/M-nº — até 3 tentativas se outro
+  // celular pegar o mesmo número no mesmo segundo (erro de chave única).
+  async salvarEquipe(os: OSCampo, prefixo: string): Promise<{ ok: boolean; erro?: string; os?: OSCampo }> {
+    if (os.id || os.numero) return this.salvar(os); // edição/nº oficial: fluxo normal
+    for (let tent = 0; tent < 3; tent++) {
+      const ref = await this.proximaRefEquipe(prefixo);
+      if (!ref) return this.salvar(os); // banco sem a coluna ainda → F-nn do trigger
+      const r = await this.salvar({ ...os, fict_ref: ref });
+      if (r.ok || !/duplicate|unique|ux_os_fict_ref/i.test(r.erro || '')) return r;
+    }
+    return this.salvar(os); // 3 empates seguidos (improvável) → F-nn garante o registro
   },
 
   // Próximo número da contagem FICTÍCIA (segue a sequência criada pelo almoxarifado).

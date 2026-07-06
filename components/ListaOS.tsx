@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
-import { OSCampo } from '../types';
+import { OSCampo, refDaOS } from '../types';
 import { medDoMes } from '../config';
 import { osService } from '../services/osService';
 
@@ -83,7 +83,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
 
   const excluir = async (os: OSCampo) => {
     if (!os.id) return;
-    if (!confirm(`Excluir a O.S. ${os.numero ?? '(s/ nº)'} — ${os.unidade}?`)) return;
+    if (!confirm(`Excluir a O.S. ${refDaOS(os)} — ${os.unidade}?`)) return;
     await osService.excluir(os.id);
     aoMudar();
   };
@@ -109,7 +109,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   // emergencial): 1 toque vincula o nº oficial — o F-nº fica guardado,
   // então o cruzamento de material feito no F-nº não se perde
   const vincularNumero = async (os: OSCampo) => {
-    const resp = prompt(`Nº OFICIAL da O.S. que chegou por e-mail\n(${os.numero_fict ? 'hoje é a F-' + os.numero_fict : 'hoje está sem nº'} — ${os.unidade}):`);
+    const resp = prompt(`Nº OFICIAL da O.S. que chegou por e-mail\n(hoje é a ${refDaOS(os)} — ${os.unidade}):`);
     if (resp == null) return;
     const n = parseInt(resp.replace(/\D/g, ''), 10);
     if (!n) return;
@@ -182,7 +182,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
             <div key={os.id} className={`border rounded-xl p-3 transition-colors ${travada(os) ? 'border-stone-100 bg-stone-50/60' : 'border-stone-100 hover:border-fpv-100'}`}>
               <div className="flex items-start gap-3">
                 <div className="w-14 shrink-0 text-center">
-                  <div className="font-bold text-stone-900 tabular-nums">{os.numero ?? (os.numero_fict ? `F-${os.numero_fict}` : 'S/Nº')}</div>
+                  <div className="font-bold text-stone-900 tabular-nums">{refDaOS(os)}</div>
                   {os.emergencial && <Siren size={13} className="text-red-500 mx-auto mt-1" />}
                 </div>
                 <button type="button" onClick={() => setAberta(exp ? null : (os.id ?? null))} className="flex-1 min-w-0 text-left">

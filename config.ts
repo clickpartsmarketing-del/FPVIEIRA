@@ -19,10 +19,13 @@ export const ALMOX = ['joao'];
 // A visão "Minhas O.S." da equipe é POR FISCAL responsável (decisão
 // Renan 05/07): equipe 1 vê as emergenciais do Renato, equipe 2 as
 // do Wellington — não por executor.
-export interface Equipe { fiscal: string; membros: string[]; }
+// prefixo = numeração da equipe (decisão Renan 05/07 à noite): O.S. sem
+// nº oficial nasce L01, L02… (Leandro) / M01, M02… (Miqueias), gerada
+// pelo sistema — nunca colide com nº de e-mail nem com F-nn do legado.
+export interface Equipe { fiscal: string; membros: string[]; prefixo: string; apelido: string; }
 export const EQUIPES: Record<string, Equipe> = {
-  emergencia1: { fiscal: 'Renato', membros: ['Renato', 'Leandro'] },
-  emergencia2: { fiscal: 'Wellington', membros: ['Wellington', 'Miqueias', 'Patrick'] },
+  emergencia1: { fiscal: 'Renato', membros: ['Renato', 'Leandro'], prefixo: 'L', apelido: 'Equipe Leandro' },
+  emergencia2: { fiscal: 'Wellington', membros: ['Wellington', 'Miqueias', 'Patrick'], prefixo: 'M', apelido: 'Equipe Miqueias' },
 };
 
 // Medição vigente pelo calendário: julho/2026 = MED 8, agosto = MED 9…

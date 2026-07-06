@@ -4,7 +4,7 @@ import {
   PenLine, Pencil, Route, Ruler, ShieldCheck, Siren, TriangleAlert, Undo2,
   UserCheck, X, Zap
 } from 'lucide-react';
-import { OSCampo } from '../types';
+import { OSCampo, refDaOS } from '../types';
 import { osService } from '../services/osService';
 import { AREAS, areaDaOS, Area, guiaMedida } from '../data/areas';
 
@@ -66,7 +66,7 @@ const fechamentoMed = () => {
   return Math.max(0, Math.round((ultimo.getTime() - agora.getTime()) / DIA_MS));
 };
 
-const rotuloOS = (o: OSCampo) => (o.numero != null ? String(o.numero) : o.numero_fict ? `F-${o.numero_fict}` : 'S/Nº');
+const rotuloOS = (o: OSCampo) => refDaOS(o);
 
 // estágio único de cada O.S. no fluxo da grana (sem dupla contagem)
 const estagio = (o: OSCampo): 'cancelada' | 'medido' | 'assinado' | 'feito' | 'rua' | 'fila' => {
@@ -81,7 +81,7 @@ const estagio = (o: OSCampo): 'cancelada' | 'medido' | 'assinado' | 'feito' | 'r
 const gerarCSV = (oss: OSCampo[], nome: string) => {
   const head = ['OS', 'F', 'Unidade', 'Fiscal', 'Classificação', 'Entrada', 'Conclusão', 'Executor', 'Status', 'Medição', 'Fiscal pediu', 'Serviço executado', 'Materiais', 'Memória de cálculo', 'Fotos', 'Assinado'];
   const q = (v: any) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const rows = oss.map(o => [o.numero, o.numero_fict ? 'F-' + o.numero_fict : '', o.unidade, o.fiscal, o.classificacao, br(o.entrada), br(o.conclusao), o.executor, o.status, o.medicao, o.solicitado, o.servico, o.materiais, o.memoria_calculo, o.foto_urls?.length || 0, o.assinado ? 'SIM' : 'NÃO'].map(q).join(';'));
+  const rows = oss.map(o => [o.numero, o.fict_ref || (o.numero_fict ? 'F-' + o.numero_fict : ''), o.unidade, o.fiscal, o.classificacao, br(o.entrada), br(o.conclusao), o.executor, o.status, o.medicao, o.solicitado, o.servico, o.materiais, o.memoria_calculo, o.foto_urls?.length || 0, o.assinado ? 'SIM' : 'NÃO'].map(q).join(';'));
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('﻿' + head.join(';') + '\n' + rows.join('\n'));
   a.download = nome;
@@ -917,7 +917,7 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
   if (filtroSelo != null) fila = fila.filter(o => paraExatamente(o, filtroSelo));
   if (busca.trim()) {
     const b = busca.trim().toLowerCase();
-    fila = fila.filter(o => o.unidade.toLowerCase().includes(b) || String(o.numero ?? '').includes(b) || `f-${o.numero_fict ?? ''}`.includes(b));
+    fila = fila.filter(o => o.unidade.toLowerCase().includes(b) || String(o.numero ?? '').includes(b) || `f-${o.numero_fict ?? ''}`.includes(b) || (o.fict_ref || '').toLowerCase().includes(b));
   }
   fila.sort((a, b) => selosDaOS(b).contagem - selosDaOS(a).contagem || (diasDesde(b.conclusao || b.entrada) ?? 0) - (diasDesde(a.conclusao || a.entrada) ?? 0));
 

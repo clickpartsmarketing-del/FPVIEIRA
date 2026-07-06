@@ -1,6 +1,6 @@
 import React from 'react';
 import { Siren, AlertTriangle, Camera, Ruler, CheckCircle2, ArrowRight } from 'lucide-react';
-import { OSCampo } from '../types';
+import { OSCampo, refDaOS } from '../types';
 import { Equipe, medDoMes } from '../config';
 
 // =============================================================
@@ -16,7 +16,7 @@ const dias = (iso?: string | null): number | null => {
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
 };
 
-const rotulo = (o: OSCampo) => (o.numero != null ? String(o.numero) : o.numero_fict ? `F-${o.numero_fict}` : 'S/Nº');
+const rotulo = refDaOS;
 
 interface Props {
   lista: OSCampo[];
@@ -27,9 +27,17 @@ interface Props {
 
 const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) => {
   const zona = lista.filter(o => o.fiscal === equipe.fiscal && o.status !== 'Cancelada');
-  // última numeração fictícia GLOBAL (spec do engenheiro: "no topo,
-  // qual foi a última numeração utilizada") — a próxima sai do trigger
+  // última numeração DA EQUIPE (spec do engenheiro: "no topo, qual foi a
+  // última utilizada") — L/M-nº novo; cai pro F-nn legado se ainda não há
+  const ultimaEquipe = lista.reduce((m, o) => {
+    if (!o.fict_ref || !o.fict_ref.startsWith(equipe.prefixo)) return m;
+    const n = parseInt(o.fict_ref.slice(equipe.prefixo.length), 10);
+    return isNaN(n) ? m : Math.max(m, n);
+  }, 0);
   const ultimaF = lista.reduce((m, o) => Math.max(m, o.numero_fict || 0), 0);
+  const chipUltima = ultimaEquipe > 0
+    ? `última ${equipe.prefixo}${String(ultimaEquipe).padStart(2, '0')}`
+    : ultimaF > 0 ? `última F-${ultimaF}` : '';
   const abertas = zona.filter(o => o.status !== 'Concluído');
   const estourou = (o: OSCampo) => {
     const d = dias(o.entrada);
@@ -61,9 +69,9 @@ const PainelEquipe: React.FC<Props> = ({ lista, equipe, aoVerLista, aoNovaOS }) 
         <Siren size={18} className="text-red-600" />
         <h2 className="font-bold text-stone-900 flex-1">Emergência · zona {equipe.fiscal}</h2>
         <span className="text-[11px] font-bold text-stone-400">{medDoMes()} vigente</span>
-        {ultimaF > 0 && (
-          <span className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-full px-2 py-0.5" title="última numeração fictícia usada (a próxima o sistema gera sozinho)">
-            última F-{ultimaF}
+        {chipUltima && (
+          <span className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-full px-2 py-0.5" title="última numeração usada pela equipe (a próxima o sistema gera sozinho)">
+            {chipUltima}
           </span>
         )}
       </div>

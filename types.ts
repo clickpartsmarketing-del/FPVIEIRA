@@ -1,7 +1,8 @@
 export interface OSCampo {
   id?: number;
   numero: number | null;
-  numero_fict?: number | null;
+  numero_fict?: number | null; // legado F-77/F-78 (sequência global antiga)
+  fict_ref?: string | null;    // numeração POR EQUIPE: L01, L02… / M01, M02…
   emergencial: boolean;
   unidade: string;
   fiscal: string;
@@ -20,6 +21,12 @@ export interface OSCampo {
   criado_em?: string;
   assinado?: boolean;
 }
+
+// referência única da O.S. em TODA tela/planilha: nº oficial > ref da
+// equipe (L01/M01) > F-nn legado > sem número
+export const refDaOS = (o: Pick<OSCampo, 'numero' | 'fict_ref' | 'numero_fict'>): string =>
+  o.numero != null ? String(o.numero)
+    : (o.fict_ref || (o.numero_fict ? `F-${o.numero_fict}` : 'S/Nº'));
 
 export const STATUS_OPTIONS = ['Pendente', 'Executando', 'Concluído', 'Assinatura', 'Material', 'Cancelada'];
 export const FISCAL_OPTIONS = ['Wellington', 'Renato', 'Central'];

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { PackageMinus, Save, Loader2, Trash2, Link2, Undo2, Pencil, Search, TrendingUp } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
-import { OSCampo } from '../types';
+import { OSCampo, refDaOS } from '../types';
 import { MATERIAIS, UNIDADES, ORIGENS } from '../data/materiais';
 import { ESCOLAS } from '../data/escolas';
 
@@ -63,17 +63,20 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
 
   const campo = (k: keyof Saida, v: any) => setSaida(prev => ({ ...prev, [k]: v }));
 
-  // referências de O.S. vivas do campo: nº oficial ou F-nn, com a escola junto
-  const refsOS = listaOS.map(os => ({
-    ref: os.numero ? String(os.numero) : (os.numero_fict ? `F-${os.numero_fict}` : ''),
-    rotulo: `${os.numero ?? (os.numero_fict ? 'F-' + os.numero_fict : 'S/Nº')} — ${os.unidade}`
-  })).filter(r => r.ref);
+  // referências de O.S. vivas do campo: nº oficial, L/M-nº da equipe ou
+  // F-nn legado — com a escola junto
+  const refsOS = listaOS.map(os => {
+    const r = refDaOS(os);
+    return { ref: r === 'S/Nº' ? '' : r, rotulo: `${r} — ${os.unidade}` };
+  }).filter(r => r.ref);
 
   // websemântica: escolher a O.S. já puxa a escola dela
   const escolheuOS = (v: string) => {
     campo('os_ref', v);
     const achada = listaOS.find(os =>
-      (os.numero && String(os.numero) === v) || (os.numero_fict && `F-${os.numero_fict}` === v));
+      (os.numero && String(os.numero) === v) ||
+      (os.fict_ref && os.fict_ref === v) ||
+      (os.numero_fict && `F-${os.numero_fict}` === v));
     if (achada) campo('escola', achada.unidade);
   };
 

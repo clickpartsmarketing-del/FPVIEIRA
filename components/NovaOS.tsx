@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Save, Mic, Camera, X, Loader2, Eraser, Siren, PackageMinus, Plus, Minus } from 'lucide-react';
-import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS } from '../types';
+import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS, refDaOS } from '../types';
 import { ESCOLAS } from '../data/escolas';
 import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
@@ -130,22 +130,27 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     const textoKit = itensKit.map(i => `${i.quantidade} ${i.unidade} ${i.descricao}`).join(' + ');
     const materiais = [os.materiais.trim(), textoKit ? `[KIT] ${textoKit}` : ''].filter(Boolean).join('\n');
 
-    const resultado = await osService.salvar({ ...os, materiais, foto_urls: urls, numero: os.numero ? Number(os.numero) : null });
+    const dados = { ...os, materiais, foto_urls: urls, numero: os.numero ? Number(os.numero) : null };
+    // equipe sem nº oficial → numeração da EQUIPE (L01/M01…), gerada no banco
+    const resultado = equipe
+      ? await osService.salvarEquipe(dados, equipe.prefixo)
+      : await osService.salvar(dados);
     setSalvando(false);
     if (!resultado.ok) { setMsg('Erro ao salvar: ' + (resultado.erro || 'verifique a conexão')); return; }
+
+    const salva = resultado.os;
+    const ref = salva && (salva.numero != null || salva.fict_ref || salva.numero_fict) ? refDaOS(salva) : '';
 
     // baixa automática do kit no estoque, amarrada ao nº que o banco devolveu
     let msgKit = '';
     if (!os.id && itensKit.length > 0 && baixaAuto) {
-      const salva = resultado.os;
-      const ref = salva?.numero ? String(salva.numero) : (salva?.numero_fict ? `F-${salva.numero_fict}` : '');
       const falhasKit = await osService.baixaKit(itensKit, ref, os.unidade);
       msgKit = falhasKit > 0
         ? ` ⚠️ ${falhasKit} item(ns) do kit NÃO baixaram no estoque — avise o João.`
         : ` 📦 ${itensKit.length} item(ns) do kit baixados no estoque${ref ? ' → O.S. ' + ref : ''}.`;
     }
 
-    setMsg((os.id ? 'O.S. atualizada ✔' : 'O.S. registrada no banco central ✔') + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : '') + msgKit);
+    setMsg((os.id ? 'O.S. atualizada ✔' : `O.S. ${ref ? ref + ' ' : ''}registrada no banco central ✔`) + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : '') + msgKit);
     setOs(vaziaPara(usuario));
     setFotos([]);
     setKit({});
@@ -160,7 +165,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   return (
     <form onSubmit={salvar} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-bold text-stone-900">{os.id ? `Editando O.S. ${os.numero ?? '(s/ nº)'}` : 'Registrar O.S. de campo'}</h2>
+        <h2 className="font-bold text-stone-900">{os.id ? `Editando O.S. ${refDaOS(os)}` : 'Registrar O.S. de campo'}</h2>
         <label className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full cursor-pointer border ${os.emergencial ? 'bg-red-50 text-red-700 border-red-200' : 'bg-stone-50 text-stone-500 border-stone-200'}`}>
           <input type="checkbox" checked={os.emergencial} onChange={e => campo('emergencial', e.target.checked)} className="hidden" />
           <Siren size={14} /> EMERGENCIAL
@@ -169,7 +174,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
       {equipe && !os.id && (
         <p className="text-[11px] text-stone-500 -mt-2">
-          Equipe {equipe.fiscal} · fiscal já preenchido · sem nº? o sistema gera o F-nº na hora · medição vigente: <b>{medDoMes()}</b> (automática no fechamento)
+          {equipe.apelido} · fiscal {equipe.fiscal} já preenchido · sem nº? o sistema gera o <b>{equipe.prefixo}-nº</b> na hora · medição vigente: <b>{medDoMes()}</b> (automática no fechamento)
         </p>
       )}
 
@@ -177,7 +182,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
         <div>
           <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Nº da O.S.</label>
           <input type="number" value={os.numero ?? ''} onChange={e => campo('numero', e.target.value ? Number(e.target.value) : null)}
-            placeholder="vazio = gera F-nº"
+            placeholder={equipe ? `vazio = gera ${equipe.prefixo}-nº` : 'vazio = gera F-nº'}
             className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         </div>
         <div>
