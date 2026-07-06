@@ -15,10 +15,13 @@ export const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
 export const ALMOX = ['joao'];
 
 // Equipes de emergência: o login é da EQUIPE — o fiscal da zona já
-// vem preenchido e o executor se escolhe entre os membros em 1 toque
+// vem preenchido e o executor se escolhe entre os membros em 1 toque.
+// A visão "Minhas O.S." da equipe é POR FISCAL responsável (decisão
+// Renan 05/07): equipe 1 vê as emergenciais do Renato, equipe 2 as
+// do Wellington — não por executor.
 export interface Equipe { fiscal: string; membros: string[]; }
 export const EQUIPES: Record<string, Equipe> = {
-  emergencia1: { fiscal: 'Renato', membros: ['Renato', 'Leandro', 'Caleb'] },
+  emergencia1: { fiscal: 'Renato', membros: ['Renato', 'Leandro'] },
   emergencia2: { fiscal: 'Wellington', membros: ['Wellington', 'Miqueias', 'Patrick'] },
 };
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pencil, Trash2, Siren, Search, CheckCircle2 } from 'lucide-react';
+import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash } from 'lucide-react';
 import { OSCampo } from '../types';
 import { osService } from '../services/osService';
 
@@ -7,7 +7,8 @@ interface Props {
   lista: OSCampo[];
   aoEditar: (os: OSCampo) => void;
   aoMudar: () => void;
-  meusNomes?: string[]; // executores do login (encarregado ou membros da equipe)
+  filtroMinhas?: (os: OSCampo) => boolean; // o que é "meu": executor (encarregado) ou fiscal da zona (equipe)
+  rotuloMinhas?: string;
   restrito?: boolean;   // campo vê SÓ as suas (decisão Renan 05/07) — sem "Todas"
   podeExcluir?: boolean; // AUDITORIA: excluir O.S. (dado de medição!) só gestão
 }
@@ -49,14 +50,14 @@ const alertaPrazo = (os: OSCampo) => {
   return null;
 };
 
-const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meusNomes, restrito = false, podeExcluir = false }) => {
+const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotuloMinhas = 'Minhas O.S.', restrito = false, podeExcluir = false }) => {
   const [busca, setBusca] = useState('');
-  const [soMinhas, setSoMinhas] = useState(!!meusNomes);
+  const [soMinhas, setSoMinhas] = useState(!!filtroMinhas);
   const [filtro, setFiltro] = useState('Todas');
   const [mostrar, setMostrar] = useState(100); // com a planilha importada são ~1.800 O.S.
 
-  const minhas = meusNomes ? lista.filter(os => meusNomes.includes(os.executor) && os.status !== 'Cancelada') : [];
-  const base = meusNomes && (soMinhas || restrito) ? minhas : lista;
+  const minhas = filtroMinhas ? lista.filter(os => filtroMinhas(os) && os.status !== 'Cancelada') : [];
+  const base = filtroMinhas && (soMinhas || restrito) ? minhas : lista;
 
   const casaFiltro = FILTROS_STATUS.find(f => f.rotulo === filtro)?.casa ?? (() => true);
 
@@ -85,12 +86,24 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meusNomes, restrit
     aoMudar();
   };
 
+  // a O.S. oficial chega DEPOIS pelo e-mail do fiscal (acontece direto na
+  // emergencial): 1 toque vincula o nº oficial — o F-nº fica guardado,
+  // então o cruzamento de material feito no F-nº não se perde
+  const vincularNumero = async (os: OSCampo) => {
+    const resp = prompt(`Nº OFICIAL da O.S. que chegou por e-mail\n(${os.numero_fict ? 'hoje é a F-' + os.numero_fict : 'hoje está sem nº'} — ${os.unidade}):`);
+    if (resp == null) return;
+    const n = parseInt(resp.replace(/\D/g, ''), 10);
+    if (!n) return;
+    await osService.salvar({ ...os, numero: n });
+    aoMudar();
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
       <div className="flex items-center gap-3 mb-3">
         <h2 className="font-bold text-stone-900 flex-1">
-          {meusNomes && (soMinhas || restrito)
-            ? <>Minhas O.S. <span className="text-stone-400 font-medium">({minhas.length})</span></>
+          {filtroMinhas && (soMinhas || restrito)
+            ? <>{rotuloMinhas} <span className="text-stone-400 font-medium">({minhas.length})</span></>
             : <>O.S. no banco central <span className="text-stone-400 font-medium">({lista.length})</span></>}
         </h2>
         <div className="relative">
@@ -100,7 +113,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meusNomes, restrit
         </div>
       </div>
 
-      {meusNomes && !restrito && (
+      {filtroMinhas && !restrito && (
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <button onClick={() => setSoMinhas(true)}
             className={`rounded-full border px-3 py-1.5 text-xs font-bold ${soMinhas ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-600 border-stone-200'}`}>
@@ -126,7 +139,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meusNomes, restrit
         })}
       </div>
 
-      {meusNomes && abertas.length > 0 && (
+      {filtroMinhas && abertas.length > 0 && (
         <p className="text-[11px] text-stone-500 mb-3">
           {abertas.length} aberta{abertas.length !== 1 ? 's' : ''}
           {semFoto > 0 && <span className="text-amber-700 font-bold"> · {semFoto} sem foto</span>}
@@ -137,7 +150,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meusNomes, restrit
       {filtradas.length === 0 && (
         <p className="text-sm text-stone-400 text-center py-8">
           {filtro !== 'Todas' ? `Nenhuma O.S. em "${filtro}".`
-            : meusNomes ? 'Nenhuma O.S. no seu nome ainda. Registre pelo Formulário 💪'
+            : filtroMinhas ? 'Nenhuma O.S. sua ainda. Registre pelo Formulário 💪'
             : 'Nenhuma O.S. ainda. Registre a primeira no Formulário 💪'}
         </p>
       )}
@@ -166,6 +179,10 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, meusNomes, restrit
                 {os.status !== 'Concluído' && (
                   <button onClick={() => concluir(os)} title="Marcar concluída"
                     className="p-1.5 text-fpv-600 hover:bg-fpv-50 rounded-lg"><CheckCircle2 size={16} /></button>
+                )}
+                {os.numero == null && (
+                  <button onClick={() => vincularNumero(os)} title="Chegou a O.S. oficial por e-mail? Vincular nº"
+                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"><Hash size={16} /></button>
                 )}
                 <button onClick={() => aoEditar(os)} title="Editar"
                   className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-stone-50 rounded-lg"><Pencil size={16} /></button>

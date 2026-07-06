@@ -16,7 +16,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento';
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v17';
+const VERSAO = 'v18';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -72,11 +72,15 @@ const App: React.FC = () => {
   const soAlmox = ALMOX.includes(usuario) && !ehGestor;
   const veAlmox = ALMOX.includes(usuario) || ehGestor;
   const equipe = EQUIPES[usuario];
-  // "responsabilidade do autor do painel": encarregado vê as SUAS;
-  // login de equipe (emergencia1/2) vê as O.S. dos MEMBROS da equipe
-  const meusNomes = ehGestor ? undefined
-    : equipe ? equipe.membros
-    : (() => { const n = EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario)); return n ? [n] : undefined; })();
+  // "responsabilidade do autor do painel": encarregado vê as O.S. em
+  // que é o EXECUTOR; equipe de emergência vê as emergenciais do seu
+  // FISCAL (zona) — decisão Renan 05/07
+  const meuExecutor = ehGestor || equipe ? undefined
+    : EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
+  const filtroMinhas = ehGestor ? undefined
+    : equipe ? (os: OSCampo) => os.emergencial && os.fiscal === equipe.fiscal
+    : meuExecutor ? (os: OSCampo) => os.executor === meuExecutor
+    : undefined;
 
   const trocarSenha = async () => {
     if (novaSenha.length < 6) { setSenhaMsg('A senha precisa de pelo menos 6 caracteres.'); return; }
@@ -159,8 +163,9 @@ const App: React.FC = () => {
             lista={lista}
             aoEditar={(os) => { setEditando(os); setAba('nova'); }}
             aoMudar={recarregar}
-            meusNomes={meusNomes}
-            restrito={!ehGestor && !!meusNomes}
+            filtroMinhas={filtroMinhas}
+            rotuloMinhas={equipe ? `Emergenciais · fiscal ${equipe.fiscal}` : 'Minhas O.S.'}
+            restrito={!ehGestor && !!filtroMinhas}
             podeExcluir={ehGestor}
           />
         )}
@@ -181,7 +186,7 @@ const App: React.FC = () => {
         <div className="max-w-3xl mx-auto flex gap-1">
           {VOZ_ATIVA && !soAlmox && <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />}
           {!soAlmox && <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />}
-          {!soAlmox && <TabBtn id="lista" icon={ListChecks} label={meusNomes ? 'Minhas O.S.' : `O.S. (${lista.length})`} />}
+          {!soAlmox && <TabBtn id="lista" icon={ListChecks} label={filtroMinhas ? 'Minhas O.S.' : `O.S. (${lista.length})`} />}
           {veAlmox && <TabBtn id="almox" icon={Package} label="Almox" />}
           {ehGestor && <TabBtn id="gestao" icon={LayoutDashboard} label="Gestão" />}
           {!soAlmox && <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />}
