@@ -22,10 +22,13 @@ export const ALMOX = ['joao'];
 // prefixo = numeração da equipe (decisão Renan 05/07 à noite): O.S. sem
 // nº oficial nasce L01, L02… (Leandro) / M01, M02… (Miqueias), gerada
 // pelo sistema — nunca colide com nº de e-mail nem com F-nn do legado.
+// CORREÇÃO Renan 06/07 (teste real): Leandro é a equipe do fiscal
+// WELLINGTON e Miqueias a do RENATO (estava invertido). Logins e senhas
+// não mudam — só a zona que cada equipe enxerga.
 export interface Equipe { fiscal: string; membros: string[]; prefixo: string; apelido: string; }
 export const EQUIPES: Record<string, Equipe> = {
-  emergencia1: { fiscal: 'Renato', membros: ['Renato', 'Leandro'], prefixo: 'L', apelido: 'Equipe Leandro' },
-  emergencia2: { fiscal: 'Wellington', membros: ['Wellington', 'Miqueias', 'Patrick'], prefixo: 'M', apelido: 'Equipe Miqueias' },
+  emergencia1: { fiscal: 'Wellington', membros: ['Wellington', 'Leandro'], prefixo: 'L', apelido: 'Equipe Leandro' },
+  emergencia2: { fiscal: 'Renato', membros: ['Renato', 'Miqueias', 'Patrick'], prefixo: 'M', apelido: 'Equipe Miqueias' },
 };
 
 // Encarregados da CORRETIVA: painel próprio (igual ao emergencial, mas
