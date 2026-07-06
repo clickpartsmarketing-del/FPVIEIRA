@@ -84,8 +84,18 @@ export const osService = {
     return { ok: !error, erro: error?.message, os: data as OSCampo };
   },
 
+  // EXCLUSÃO = MARCA, nunca apaga (regra Renan 06/07): a linha fica no
+  // banco com excluida=true, o número segue ocupado na contagem e o
+  // trigger do banco grava quem/quando/o que era no os_campo_log
   async excluir(id: number): Promise<boolean> {
-    const { error } = await supabase.from('os_campo').delete().eq('id', id);
+    let { error } = await supabase.from('os_campo')
+      .update({ excluida: true, status: 'Cancelada' }).eq('id', id);
+    // banco sem a coluna ainda (AUDITORIA-EDICOES.sql pendente) →
+    // ao menos cancela; NUNCA mais delete físico pelo app
+    if (error && /excluida/i.test(error.message)) {
+      ({ error } = await supabase.from('os_campo')
+        .update({ status: 'Cancelada' }).eq('id', id));
+    }
     return !error;
   },
 

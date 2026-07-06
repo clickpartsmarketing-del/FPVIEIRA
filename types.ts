@@ -21,6 +21,7 @@ export interface OSCampo {
   foto_urls: string[];
   criado_em?: string;
   assinado?: boolean;
+  excluida?: boolean; // marca de exclusão — número preservado, log no banco
 }
 
 // referência única da O.S. em TODA tela/planilha: nº oficial > ref da
