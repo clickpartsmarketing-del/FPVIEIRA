@@ -103,6 +103,8 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (salvando) return; // anti duplo-toque (refatoração sênior 06/07)
+    // ===== validações SÍNCRONAS (antes de travar o botão) =====
     if (!os.unidade.trim()) { setMsg('Informe a unidade (escola).'); return; }
     if (equipe && !os.executor) { setMsg('Toque em QUEM EXECUTOU (botões da equipe).'); return; }
     // MEDIÇÃO FECHADA é intocável pelo campo (spec do engenheiro) —
@@ -110,18 +112,6 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     if (!ehGestor && os.id && (os.medicao || '').trim() && os.medicao !== medDoMes()) {
       setMsg(`🔒 Esta O.S. está na ${os.medicao} (medição FECHADA) — não pode mais ser alterada. Fale com a gestão.`);
       return;
-    }
-    // GUARDA ANTI-DUPLICATA (caso real 06/07: digitaram "79" seguindo a
-    // contagem do papel e colidiu com a O.S. 79 oficial de janeiro)
-    if (!os.id && os.numero) {
-      const existe = await osService.numeroExiste(Number(os.numero));
-      if (existe) {
-        if (!ehGestor) {
-          setMsg(`⛔ A O.S. ${os.numero} JÁ EXISTE (${existe.unidade} · ${existe.status}). Se a sua é NOVA, deixe o Nº VAZIO — o sistema gera o ${prefixoRef ?? 'F'}-nº sozinho. Se é a mesma, ache-a na lista e edite pelo lápis.`);
-          return;
-        }
-        if (!confirm(`O.S. ${os.numero} já existe (${existe.unidade} · ${existe.status}). Criar DUPLICADA mesmo assim?`)) return;
-      }
     }
     // SÓ CONCLUI COMPLETA: sem foto + memória + executor não fecha
     if (!ehGestor && os.status === 'Concluído') {
@@ -131,8 +121,22 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       if (!os.executor.trim()) falta.push('executor');
       if (falta.length > 0) { setMsg(`⛔ Para CONCLUIR falta: ${falta.join(' + ')}. Sem as informações a O.S. não será concluída.`); return; }
     }
+    // ===== daqui pra baixo é assíncrono: botão TRAVADO =====
     setSalvando(true);
     setMsg('');
+    // GUARDA ANTI-DUPLICATA (caso real 06/07: digitaram "79" seguindo a
+    // contagem do papel e colidiu com a O.S. 79 oficial de janeiro)
+    if (!os.id && os.numero) {
+      const existe = await osService.numeroExiste(Number(os.numero));
+      if (existe) {
+        if (!ehGestor) {
+          setSalvando(false);
+          setMsg(`⛔ A O.S. ${os.numero} JÁ EXISTE (${existe.unidade} · ${existe.status}). Se a sua é NOVA, deixe o Nº VAZIO — o sistema gera o ${prefixoRef ?? 'F'}-nº sozinho. Se é a mesma, ache-a na lista e edite pelo lápis.`);
+          return;
+        }
+        if (!confirm(`O.S. ${os.numero} já existe (${existe.unidade} · ${existe.status}). Criar DUPLICADA mesmo assim?`)) { setSalvando(false); return; }
+      }
+    }
 
     // AUDITORIA: se o upload de foto falhar (sinal ruim na escola), NÃO salva
     // silenciosamente sem evidência — pergunta antes. Foto perdida = risco de glosa.

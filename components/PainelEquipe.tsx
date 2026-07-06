@@ -88,11 +88,15 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
     return () => { clearTimeout(t); supabase.removeChannel(ch); };
   }, []);
 
+  const enviandoRef = React.useRef(false);
   const enviarPedido = async () => {
+    if (enviandoRef.current) return; // anti duplo-toque
     if (!itensPedido.trim()) { setMsgMat('Escreva os itens — um por linha, com quantidade.'); return; }
+    enviandoRef.current = true;
     const { error } = await supabase.from('solicitacao_material').insert([{
       solicitante: cfg.apelido, os_ref: osPedido || null, itens: itensPedido.trim()
     }]);
+    enviandoRef.current = false;
     if (error) { setMsgMat(/solicitacao_material/.test(error.message) ? '⚠️ O gestor precisa rodar o ALMOX-V2.sql primeiro.' : 'Erro: ' + error.message); return; }
     setMsgMat('📦 Pedido enviado ao almoxarifado!');
     setItensPedido(''); setOsPedido(''); setPedidoAberto(false);

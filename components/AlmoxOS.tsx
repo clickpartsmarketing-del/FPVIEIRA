@@ -29,6 +29,7 @@ interface Entrada {
 interface Ferramenta {
   id?: number; descricao: string; quantidade: number; status: string;
   com_quem?: string | null; obra?: string | null; desde?: string | null;
+  obs?: string | null; // "O.S. x" quando a entrega foi vinculada a um serviço
 }
 interface Solicitacao {
   id?: number; data: string; solicitante: string; os_ref?: string | null;
@@ -141,14 +142,17 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
   // O.S. emergenciais em aberto (spec: só emergencial, pendente/executando)
   const emergAbertas = listaOS.filter(o => o.emergencial && ['Pendente', 'Executando', 'Material'].includes(o.status));
 
-  const refsOS = listaOS.map(os => {
-    const r = refDaOS(os);
-    return { ref: r === 'S/Nº' ? '' : r, rotulo: `${r} — ${os.unidade}` };
-  }).filter(r => r.ref);
+  // só O.S. VIVAS no dropdown (excluída/cancelada não recebe material —
+  // refatoração sênior 06/07)
+  const refsOS = listaOS
+    .filter(os => !os.excluida && os.status !== 'Cancelada')
+    .map(os => {
+      const r = refDaOS(os);
+      return { ref: r === 'S/Nº' ? '' : r, rotulo: `${r} — ${os.unidade}` };
+    }).filter(r => r.ref);
   const escolheuOS = (v: string) => {
-    setSaida(p => ({ ...p, os_ref: v }));
     const achada = listaOS.find(os => refDaOS(os) === v);
-    if (achada) setSaida(p => ({ ...p, os_ref: v, escola: achada.unidade }));
+    setSaida(p => ({ ...p, os_ref: v, escola: achada ? achada.unidade : p.escola }));
   };
 
   // um destinatário confirma o recebimento no login dele (spec)
@@ -589,7 +593,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[] }> = ({ listaOS }) => {
             {ferramentas.map(f => (
               <div key={f.id} className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${f.status === 'EM CAMPO' ? 'border-amber-200 bg-amber-50/50' : 'border-stone-100'}`}>
                 <span className="flex-1 min-w-0 truncate"><b>{f.quantidade > 1 ? f.quantidade + '× ' : ''}{f.descricao}</b>
-                  {f.status === 'EM CAMPO' && <span className="text-[11px] text-amber-800"> · com <b>{f.com_quem}</b>{f.obra ? ` em ${f.obra}` : ''}{(f as any).obs ? ` · ${(f as any).obs}` : ''}{f.desde ? ` desde ${f.desde.split('-').reverse().slice(0, 2).join('/')}` : ''}</span>}
+                  {f.status === 'EM CAMPO' && <span className="text-[11px] text-amber-800"> · com <b>{f.com_quem}</b>{f.obra ? ` em ${f.obra}` : ''}{f.obs ? ` · ${f.obs}` : ''}{f.desde ? ` desde ${f.desde.split('-').reverse().slice(0, 2).join('/')}` : ''}</span>}
                 </span>
                 {f.status === 'ESTOQUE'
                   ? <button onClick={() => entregarFerr(f)} className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-3 py-1">entregar →</button>

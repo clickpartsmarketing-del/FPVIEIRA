@@ -90,7 +90,9 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
 
   // SÓ CONCLUI COMPLETA (spec do engenheiro): sem foto, memória e executor
   // não fecha — é o que trava a glosa lá na frente. Gestão pode forçar.
+  const ocupadoRef = React.useRef(false);
   const concluir = async (os: OSCampo) => {
+    if (ocupadoRef.current) return; // anti duplo-toque
     if (!podeExcluir) {
       const falta: string[] = [];
       if (!(os.foto_urls?.length > 0)) falta.push('foto');
@@ -101,7 +103,9 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
         return;
       }
     }
+    ocupadoRef.current = true;
     await osService.salvar({ ...os, status: 'Concluído', conclusao: os.conclusao || hojeLocal() });
+    ocupadoRef.current = false;
     aoMudar();
   };
 
@@ -113,6 +117,12 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     if (resp == null) return;
     const n = parseInt(resp.replace(/\D/g, ''), 10);
     if (!n) return;
+    // mesma guarda anti-duplicata do formulário (refatoração sênior 06/07)
+    const existe = await osService.numeroExiste(n);
+    if (existe && existe.id !== os.id) {
+      alert(`⛔ O nº ${n} JÁ EXISTE no banco (${existe.unidade} · ${existe.status}). Confira o e-mail — se for a mesma O.S., é ELA que deve ser trabalhada (ache na lista).`);
+      return;
+    }
     await osService.salvar({ ...os, numero: n });
     aoMudar();
   };
