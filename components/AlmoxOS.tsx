@@ -64,6 +64,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
   const [catFiltro, setCatFiltro] = useState('TODAS');
   const [mostrar, setMostrar] = useState(30);
   const [faltaSQL, setFaltaSQL] = useState(false);
+  const [ferrAberta, setFerrAberta] = useState<number | null>(null); // ficha da ferramenta
 
   const carregar = async () => {
     const [rs, ri, re, rf, rq] = await Promise.all([
@@ -265,8 +266,23 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
     carregar();
   };
   const receberFerr = async (f: Ferramenta) => {
-    await supabase.from('ferramenta').update({ status: 'ESTOQUE', com_quem: null, obra: null, desde: null }).eq('id', f.id);
+    await supabase.from('ferramenta').update({ status: 'ESTOQUE', com_quem: null, obra: null, desde: null, obs: null }).eq('id', f.id);
     carregar();
+  };
+  // João consulta E corrige o vínculo depois da entrega (pedido Renan
+  // 06/07: "precisa acessar os dados de onde foi parar")
+  const editarVinculoFerr = async (f: Ferramenta) => {
+    const quem = prompt('Com quem está?', f.com_quem || ''); if (quem == null) return;
+    const obra = prompt('Em qual obra/escola?', f.obra || ''); if (obra == null) return;
+    const osAtual = (f.obs || '').replace(/^O\.S\.\s*/i, '').trim();
+    const osRef = (prompt('O.S. vinculada (vazio = sem vínculo):', osAtual) ?? osAtual).trim();
+    const { error } = await supabase.from('ferramenta').update({
+      com_quem: quem.trim() || f.com_quem,
+      obra: obra.trim() || null,
+      obs: osRef ? `O.S. ${osRef}` : null
+    }).eq('id', f.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`✏️ ${f.descricao}: vínculo atualizado.`); carregar();
   };
 
   // REV 001 do gestor: João edita descrição/unidade/mínimo; a CONTAGEM
@@ -622,16 +638,48 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
           {ferramentas.length === 0 && <p className="text-sm text-stone-400 text-center py-4">Nenhuma ferramenta cadastrada.</p>}
           {/* REV 001 do gestor: listagem POR RESPONSÁVEL (tópicos) */}
           {(() => {
-            const linha = (f: Ferramenta) => (
-              <div key={f.id} className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${f.status === 'EM CAMPO' ? 'border-amber-200 bg-amber-50/50' : 'border-stone-100'}`}>
-                <span className="flex-1 min-w-0 truncate"><b>{f.quantidade > 1 ? f.quantidade + '× ' : ''}{f.descricao}</b>
-                  {f.status === 'EM CAMPO' && <span className="text-[11px] text-amber-800">{f.obra ? ` · ${f.obra}` : ''}{f.obs ? ` · ${f.obs}` : ''}{f.desde ? ` · desde ${f.desde.split('-').reverse().slice(0, 2).join('/')}` : ''}</span>}
-                </span>
-                {f.status === 'ESTOQUE'
-                  ? <button onClick={() => entregarFerr(f)} className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-3 py-1">entregar →</button>
-                  : <button onClick={() => receberFerr(f)} className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-3 py-1">← voltou</button>}
-              </div>
-            );
+            const linha = (f: Ferramenta) => {
+              const osRef = (f.obs || '').replace(/^O\.S\.\s*/i, '').trim();
+              const osVinc = osRef ? listaOS.find(o => refDaOS(o) === osRef) : undefined;
+              const aberta = ferrAberta === f.id;
+              return (
+                <div key={f.id} className={`border rounded-xl px-3 py-2 text-sm ${f.status === 'EM CAMPO' ? 'border-amber-200 bg-amber-50/50' : 'border-stone-100'}`}>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setFerrAberta(aberta ? null : (f.id ?? null))} className="flex-1 min-w-0 text-left truncate">
+                      <b>{f.quantidade > 1 ? f.quantidade + '× ' : ''}{f.descricao}</b>
+                      {f.status === 'EM CAMPO' && (
+                        osRef
+                          ? <span className="text-[11px] font-bold text-fpv-700"> · O.S. {osRef}</span>
+                          : <span className="text-[11px] font-bold text-amber-700"> · SEM O.S. vinculada</span>
+                      )}
+                      <span className="text-[10px] text-stone-400"> {aberta ? '▲' : '▼'}</span>
+                    </button>
+                    {f.status === 'EM CAMPO' && (
+                      <button onClick={() => editarVinculoFerr(f)} title="Editar com quem / obra / O.S."
+                        className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
+                    )}
+                    {f.status === 'ESTOQUE'
+                      ? <button onClick={() => entregarFerr(f)} className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-3 py-1 shrink-0">entregar →</button>
+                      : <button onClick={() => receberFerr(f)} className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 shrink-0">← voltou</button>}
+                  </div>
+                  {/* a FICHA: onde a ferramenta foi parar (pedido Renan 06/07) */}
+                  {aberta && (
+                    <div className="mt-1.5 pt-1.5 border-t border-amber-100 text-[11px] text-stone-600 space-y-0.5">
+                      {f.status === 'EM CAMPO' ? (
+                        <>
+                          <p>👷 Com: <b>{f.com_quem || '—'}</b></p>
+                          <p>📍 Obra: <b>{f.obra || '— (toque no lápis p/ preencher)'}</b></p>
+                          <p>🔗 O.S.: <b className={osRef ? 'text-fpv-700' : 'text-amber-700'}>{osRef || 'SEM VÍNCULO (toque no lápis)'}</b>{osVinc ? <span className="text-stone-500"> — {osVinc.unidade} · {osVinc.status}</span> : ''}</p>
+                          <p>📅 Em campo desde: {f.desde ? f.desde.split('-').reverse().join('/') : '—'}</p>
+                        </>
+                      ) : (
+                        <p>📦 No estoque do almoxarifado — disponível, sem vínculo com O.S.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            };
             const emCampo = ferramentas.filter(f => f.status === 'EM CAMPO');
             const noEstoque = ferramentas.filter(f => f.status !== 'EM CAMPO');
             const grupos: Record<string, Ferramenta[]> = {};
