@@ -21,12 +21,14 @@ const FILTROS_STATUS: { rotulo: string; casa: (os: OSCampo) => boolean }[] = [
   { rotulo: 'Pendente', casa: os => os.status === 'Pendente' || os.status === 'Material' },
   { rotulo: 'Executando', casa: os => os.status === 'Executando' },
   { rotulo: 'Pend. assinatura', casa: os => os.status === 'Assinatura' },
+  { rotulo: 'Avaliando', casa: os => os.status === 'Avaliando' },
   { rotulo: 'Concluídas', casa: os => os.status === 'Concluído' },
 ];
 
 const pillCor = (status: string) => {
   if (status === 'Concluído') return 'bg-fpv-50 text-fpv-700 border-fpv-100';
   if (status === 'Assinatura') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'Avaliando') return 'bg-indigo-50 text-indigo-700 border-indigo-200';
   if (status === 'Cancelada') return 'bg-stone-100 text-stone-500 border-stone-200';
   return 'bg-orange-50 text-orange-700 border-orange-200';
 };
@@ -199,6 +201,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                   <div className="text-sm font-medium text-stone-800 truncate">{os.unidade}</div>
                   <div className="text-xs text-stone-500 truncate">{os.solicitado || os.servico || os.materiais || '—'}</div>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {os.prioridade && <span className="text-[11px] font-black border rounded-full px-2 py-0.5 bg-red-600 text-white border-red-600">P{os.prioridade}</span>}
                     <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${pillCor(os.status)}`}>{os.status}{os.medicao ? ' · ' + os.medicao : ''}</span>
                     {os.excluida && <span className="text-[11px] font-bold border rounded-full px-2 py-0.5 bg-stone-800 text-white border-stone-800">🗑 EXCLUÍDA</span>}
                     {os.tipo && <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${os.tipo === 'Emergencial' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-stone-50 text-stone-500 border-stone-200'}`}>{os.tipo}</span>}
@@ -252,6 +255,20 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                   )}
                   {!os.solicitado && !os.servico && !os.materiais && !os.memoria_calculo && (
                     <p className="text-stone-400">Sem descrição registrada ainda — toque no lápis para completar.</p>
+                  )}
+                  {/* PRIORIDADE manual (RV000): a gestão define, o painel do
+                      usuário ordena por ela */}
+                  {podeExcluir && (
+                    <p className="flex items-center gap-1.5 pt-1">
+                      <b className="text-stone-400 uppercase text-[10px]">Prioridade:</b>
+                      {[1, 2, 3].map(p => (
+                        <button key={p} onClick={async () => { await osService.salvar({ ...os, prioridade: os.prioridade === p ? null : p }); aoMudar(); }}
+                          className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.prioridade === p ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-500 border-stone-200'}`}>
+                          P{p}
+                        </button>
+                      ))}
+                      {os.prioridade && <button onClick={async () => { await osService.salvar({ ...os, prioridade: null }); aoMudar(); }} className="text-[11px] text-stone-400 underline">limpar</button>}
+                    </p>
                   )}
                 </div>
               )}

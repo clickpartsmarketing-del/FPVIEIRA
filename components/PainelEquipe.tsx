@@ -133,12 +133,18 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
     return d != null && d > (o.emergencial ? 2 : 15);
   };
   const estouradas = abertas.filter(estourou);
-  const semFoto = abertas.filter(o => !(o.foto_urls?.length > 0));
+  // RV000: sem foto INDEPENDENTE do status (não só abertas)
+  const semFoto = zona.filter(o => !(o.foto_urls?.length > 0));
   const semMemoria = abertas.filter(o => !(o.memoria_calculo || '').trim());
   const concluidas7d = zona.filter(o => o.status === 'Concluído' && (dias(o.conclusao) ?? 99) <= 7);
 
-  // prioridade: emergencial estourada > estourada > emergencial > mais velha
+  // fila: PRIORIDADE MANUAL da gestão vence tudo (RV000: "determinadas
+  // pelo Nicolas e Renan"); depois emergencial estourada > estourada >
+  // emergencial > mais velha
   const prioridade = [...abertas].sort((a, b) => {
+    const ma = a.prioridade || 9;
+    const mb = b.prioridade || 9;
+    if (ma !== mb) return ma - mb;
     const pa = (estourou(a) ? 2 : 0) + (a.emergencial ? 1 : 0);
     const pb = (estourou(b) ? 2 : 0) + (b.emergencial ? 1 : 0);
     if (pa !== pb) return pb - pa;
@@ -172,11 +178,13 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         <Kpi n={concluidas7d.length} rot="concluídas 7d" />
       </div>
 
-      {/* funil por status (spec do engenheiro): a zona em 4 baldes */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* funil por status (RV000): pendente → executando → assinatura →
+          avaliando → concluído */}
+      <div className="grid grid-cols-5 gap-1.5">
         <Kpi n={zona.filter(o => ['Pendente', 'Material'].includes(o.status)).length} rot="pendente" />
         <Kpi n={zona.filter(o => o.status === 'Executando').length} rot="executando" />
         <Kpi n={zona.filter(o => o.status === 'Assinatura').length} rot="assinatura" />
+        <Kpi n={zona.filter(o => o.status === 'Avaliando').length} rot="avaliando" />
         <Kpi n={zona.filter(o => o.status === 'Concluído').length} rot="concluído" />
       </div>
 
@@ -199,6 +207,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
             const d = dias(o.entrada);
             return (
               <div key={o.id} className="flex items-center gap-2.5 border border-stone-100 rounded-xl px-3 py-2">
+                {o.prioridade && <span className="text-[10px] font-black bg-red-600 text-white rounded-full px-1.5 py-0.5 shrink-0">P{o.prioridade}</span>}
                 <span className="w-12 shrink-0 text-center font-bold text-stone-900 tabular-nums text-sm">{rotulo(o)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-stone-800 truncate">{o.unidade}</div>

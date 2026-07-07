@@ -65,6 +65,8 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
   const [mostrar, setMostrar] = useState(30);
   const [faltaSQL, setFaltaSQL] = useState(false);
   const [ferrAberta, setFerrAberta] = useState<number | null>(null); // ficha da ferramenta
+  const [apelidos, setApelidos] = useState<string[]>([]); // autopreenchimento acumulativo (REV002)
+  const [mesFiltro, setMesFiltro] = useState('TODOS'); // histórico por mês (REV002)
 
   const carregar = async () => {
     const [rs, ri, re, rf, rq] = await Promise.all([
@@ -76,6 +78,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
     ]);
     if (!rs.error && rs.data) setSaidas(rs.data as Saida[]);
     if (!ri.error && ri.data) setItens(ri.data as ItemEstoque[]);
+    // vocabulário aprendido com a digitação (REV002)
+    const ra = await supabase.from('apelido_material').select('digitado').order('usos', { ascending: false }).limit(500);
+    if (!ra.error && ra.data) setApelidos((ra.data as { digitado: string }[]).map(a => a.digitado));
     if (!re.error && re.data) setEntradas(re.data as Entrada[]);
     if (!rf.error && rf.data) setFerramentas(rf.data as Ferramenta[]);
     if (!rq.error && rq.data) setSolicitacoes(rq.data as Solicitacao[]);
@@ -212,7 +217,30 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
     }
     setSalvando(false);
     if (error) { setMsg('Erro: ' + error.message); return; }
-    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${osRef ? ' → O.S. ' + osRef : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}`);
+
+    // REV002: material FORA do estoque → alerta + cadastro automático
+    // com saldo NEGATIVO até a contagem real (gestão ajusta no 🧮)
+    let alertaCad = '';
+    const jaCadastrado = itens.some(i => norm(i.descricao) === norm(saida.descricao));
+    if (!jaCadastrado) {
+      const { error: ec } = await supabase.from('estoque_item').insert([{
+        descricao: saida.descricao.trim(), categoria: 'DIVERSOS',
+        unidade: saida.unidade, qtd_minima: 0, saldo_inicial: 0
+      }]);
+      if (!ec) alertaCad = ` ⚠️ item fora do estoque — CADASTRADO automático (saldo ficará NEGATIVO até a contagem da gestão).`;
+    }
+    // aprendizado de digitação (REV002): termo fora do catálogo vira sugestão
+    if (!MATERIAIS.some(m => norm(m) === norm(saida.descricao))) {
+      const dig = saida.descricao.trim();
+      const { data: ap } = await supabase.from('apelido_material').select('id,usos').eq('digitado', dig).limit(1);
+      if (ap && ap.length > 0) {
+        await supabase.from('apelido_material').update({ usos: (ap[0] as any).usos + 1 }).eq('id', (ap[0] as any).id);
+      } else {
+        await supabase.from('apelido_material').insert([{ digitado: dig, canonico: dig }]);
+      }
+    }
+
+    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${osRef ? ' → O.S. ' + osRef : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}${alertaCad}`);
     setGerarOS(false);
     setSaida(p => ({ ...SAIDA_VAZIA, data: p.data, escola: p.escola, os_ref: osRef, origem: p.origem }));
     carregar();
@@ -298,6 +326,13 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
     if (error) { setMsg('Erro: ' + error.message); return; }
     setMsg(`✏️ ${desc.trim()} atualizado.`); carregar();
   };
+  // REV002: excluir item do estoque — só gestão (RLS já restringe no banco)
+  const excluirItem = async (i: ItemEstoque) => {
+    if (!confirm(`Excluir "${i.descricao}" do catálogo do estoque?\n(As saídas históricas dele NÃO são apagadas.)`)) return;
+    const { error } = await supabase.from('estoque_item').delete().eq('id', i.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`🗑 ${i.descricao} removido do catálogo.`); carregar();
+  };
   const ajustarContagem = async (i: ItemEstoque) => {
     const s = prompt(`CONTAGEM física de "${i.descricao}" (ajuste de GESTÃO — atual: ${i.saldo_inicial}):`, String(i.saldo_inicial));
     if (s == null) return;
@@ -347,6 +382,19 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
     await supabase.from('saida_material').update({ recebido: true }).eq('id', s.id); carregar();
   };
 
+  // vocabulário único p/ autopreenchimento em TODAS as funções (REV002):
+  // catálogo fixo + itens do estoque + termos APRENDIDOS da digitação
+  const VOCABULARIO = Array.from(new Set([
+    ...MATERIAIS,
+    ...itens.map(i => i.descricao),
+    ...apelidos,
+  ]));
+
+  // trava da medição vigente nas saídas (REV002): mês anterior = só gestão
+  const mesVigente = hoje().slice(0, 7);
+  const travadaSaida = (s: Saida) => !ehGestor && (s.data || '').slice(0, 7) < mesVigente;
+  const mesesDisponiveis = Array.from(new Set(saidas.map(s => (s.data || '').slice(0, 7)).filter(Boolean))).sort().reverse();
+
   const inputCls = 'w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500';
   const SubBtn = ({ id, icon: Icon, rot, badge }: { id: SubAba; icon: any; rot: string; badge?: number }) => (
     <button onClick={() => setSub(id)}
@@ -359,14 +407,17 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
   const ListaSaidas = ({ limite }: { limite: number }) => (
     <div className="space-y-1.5">
       {saidas.filter(s =>
-        !buscaLista ||
-        s.descricao.toLowerCase().includes(buscaLista.toLowerCase()) ||
-        (s.escola || '').toLowerCase().includes(buscaLista.toLowerCase()) ||
-        (s.os_ref || '').toLowerCase().includes(buscaLista.toLowerCase())
+        (mesFiltro === 'TODOS' || (s.data || '').slice(0, 7) === mesFiltro) && (
+          !buscaLista ||
+          s.descricao.toLowerCase().includes(buscaLista.toLowerCase()) ||
+          (s.escola || '').toLowerCase().includes(buscaLista.toLowerCase()) ||
+          (s.os_ref || '').toLowerCase().includes(buscaLista.toLowerCase())
+        )
       ).slice(0, limite).map(s => {
         const dev = ehDevolucao(s);
+        const trav = travadaSaida(s);
         return (
-          <div key={s.id} className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${dev ? 'border-amber-200 bg-amber-50/60' : 'border-stone-100'}`}>
+          <div key={s.id} className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${dev ? 'border-amber-200 bg-amber-50/60' : trav ? 'border-stone-100 bg-stone-50/60' : 'border-stone-100'}`}>
             <span className="text-[11px] text-stone-400 tabular-nums shrink-0">{s.data?.split('-').reverse().slice(0, 2).join('/')}</span>
             <span className="flex-1 min-w-0 truncate">
               {dev ? <b className="text-amber-700">↩ +{Math.abs(s.quantidade)} {s.unidade}</b> : <b>{s.quantidade} {s.unidade}</b>} {s.descricao}
@@ -378,13 +429,19 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
             {s.os_ref
               ? <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">O.S. {s.os_ref}</span>
               : <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">sem O.S.</span>}
-            {s.recebido === false && (
-              <button onClick={() => confirmarRecebidoManual(s)} title="Confirmar recebimento (assinou no papel)"
-                className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><CheckCircle2 size={14} /></button>
+            {trav ? (
+              <span className="p-1 text-stone-300 shrink-0" title="Mês fechado — só a gestão altera">🔒</span>
+            ) : (
+              <>
+                {s.recebido === false && (
+                  <button onClick={() => confirmarRecebidoManual(s)} title="Confirmar recebimento (assinou no papel)"
+                    className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><CheckCircle2 size={14} /></button>
+                )}
+                {!dev && <button onClick={() => devolver(s)} title="Devolução" className="p-1 text-stone-300 hover:text-amber-600 shrink-0"><Undo2 size={14} /></button>}
+                <button onClick={() => editarQt(s)} title="Corrigir quantidade" className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={14} /></button>
+                <button onClick={() => excluirSaida(s)} className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+              </>
             )}
-            {!dev && <button onClick={() => devolver(s)} title="Devolução" className="p-1 text-stone-300 hover:text-amber-600 shrink-0"><Undo2 size={14} /></button>}
-            <button onClick={() => editarQt(s)} title="Corrigir quantidade" className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={14} /></button>
-            <button onClick={() => excluirSaida(s)} className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
           </div>
         );
       })}
@@ -408,6 +465,10 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
         </div>
       )}
       {msg && <div className="text-sm font-medium text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-lg px-3 py-2">{msg}</div>}
+
+      {/* datalist GLOBAL (REV002): catálogo + estoque + termos aprendidos,
+          disponível em TODAS as funções do almoxarifado */}
+      <datalist id="materiais">{VOCABULARIO.map(m => <option key={m} value={m} />)}</datalist>
 
       {/* ============ ESTATÍSTICA ============ */}
       {sub === 'stats' && (
@@ -494,9 +555,8 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
                   {ORIGENS.map(o => <option key={o}>{o}</option>)}
                 </select></div>
             </div>
-            <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Material (catálogo)</label>
-              <input list="materiais" value={saida.descricao} onChange={e => setSaida(p => ({ ...p, descricao: e.target.value }))} required placeholder="ex.: SIF… já completa SIFÃO" className={inputCls} />
-              <datalist id="materiais">{MATERIAIS.map(m => <option key={m} value={m} />)}</datalist></div>
+            <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Material (catálogo + aprendidos)</label>
+              <input list="materiais" value={saida.descricao} onChange={e => setSaida(p => ({ ...p, descricao: e.target.value }))} required placeholder="ex.: SIF… já completa SIFÃO" className={inputCls} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Quantidade</label>
                 <input type="number" step="0.01" min="0" value={saida.quantidade} onChange={e => setSaida(p => ({ ...p, quantidade: parseFloat(e.target.value) || 0 }))} className={inputCls} /></div>
@@ -531,8 +591,13 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
           </form>
 
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <h3 className="font-bold text-stone-900 text-sm flex-1">Últimas saídas <span className="text-stone-400 font-medium">({saidas.length})</span></h3>
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <h3 className="font-bold text-stone-900 text-sm flex-1">Histórico de saídas <span className="text-stone-400 font-medium">({saidas.length})</span></h3>
+              <select value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}
+                className="text-xs border border-stone-200 rounded-lg bg-stone-50 px-2 py-1 outline-none focus:border-fpv-500">
+                <option value="TODOS">Todos os meses</option>
+                {mesesDisponiveis.map(m => <option key={m} value={m}>{m.split('-').reverse().join('/')}{m === mesVigente ? ' (vigente)' : ' 🔒'}</option>)}
+              </select>
               <div className="relative">
                 <Search size={13} className="absolute left-2.5 top-2 text-stone-400" />
                 <input value={buscaLista} onChange={e => setBuscaLista(e.target.value)} placeholder="material, escola, O.S…" className="pl-7 pr-2 py-1 text-xs border border-stone-200 rounded-lg bg-stone-50 outline-none focus:border-fpv-500 w-40" />
@@ -618,6 +683,10 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
                   {ehGestor && (
                     <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (só gestão)"
                       className="text-[10px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">🧮</button>
+                  )}
+                  {ehGestor && (
+                    <button onClick={() => excluirItem(i)} title="Excluir item (só gestão)"
+                      className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={13} /></button>
                   )}
                 </div>
               );
