@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v36';
+const VERSAO = 'v37';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -90,6 +90,7 @@ const App: React.FC = () => {
   // João: SÓ o Almoxarifado — é o dashboard dele, sem O.S./fechamento
   const soAlmox = ALMOX.includes(usuario) && !ehGestor;
   const veAlmox = ALMOX.includes(usuario) || ehGestor;
+  const podePriorizar = ['nicolas', 'renan'].includes(usuario);
   const equipe = EQUIPES[usuario];
   const corretiva = CORRETIVA[usuario];
   // "responsabilidade do autor do painel": encarregado vê as O.S. em
@@ -204,9 +205,10 @@ const App: React.FC = () => {
             rotuloMinhas={equipe ? `O.S. da zona · fiscal ${equipe.fiscal}` : 'Minhas O.S.'}
             restrito={!ehGestor && !!filtroMinhas}
             podeExcluir={ehGestor}
+            podePriorizar={podePriorizar}
           />
         )}
-        {aba === 'almox' && veAlmox && <AlmoxOS listaOS={lista} ehGestor={ehGestor} />}
+        {aba === 'almox' && veAlmox && <AlmoxOS listaOS={lista} ehGestor={ehGestor} usuario={usuario} />}
         {aba === 'gestao' && (
           <Gestao
             lista={lista}
@@ -221,15 +223,17 @@ const App: React.FC = () => {
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-stone-200 px-4 py-2 print-hidden">
         <div className="max-w-3xl mx-auto flex gap-1">
+          {/* rótulos de AÇÃO em linguagem direta (auditoria 07/07, foco
+              baixa escolaridade) — o pictograma é o ícone, sem emoji dobrado */}
           {painelCfg && <TabBtn id="painel" icon={LayoutDashboard} label="Painel" />}
           {VOZ_ATIVA && !soAlmox && <TabBtn id="chat" icon={MessageCircle} label="Chat O.S." />}
-          {!soAlmox && <TabBtn id="nova" icon={ClipboardPlus} label="Formulário" />}
+          {!soAlmox && <TabBtn id="nova" icon={ClipboardPlus} label="Nova O.S." />}
           {!soAlmox && <TabBtn id="lista" icon={ListChecks} label={filtroMinhas ? 'Minhas O.S.' : `O.S. (${lista.length})`} />}
-          {veAlmox && <TabBtn id="almox" icon={Package} label="Almox" />}
+          {veAlmox && <TabBtn id="almox" icon={Package} label="Material" />}
           {ehGestor && <TabBtn id="gestao" icon={LayoutDashboard} label="Gestão" />}
           {/* fechamento (folha de assinatura semanal) é rito da CORRETIVA e
               da gestão — emergência assina pela zona, some da navegação dela */}
-          {!soAlmox && !equipe && <TabBtn id="fechamento" icon={FileSignature} label="Fechamento" />}
+          {!soAlmox && !equipe && <TabBtn id="fechamento" icon={FileSignature} label="Assinar" />}
         </div>
       </nav>
     </div>

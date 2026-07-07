@@ -6,8 +6,9 @@
 -- WhatsApp) compartilham a MESMA sequência F-77+ sem risco de colisão.
 -- =====================================================================
 
--- garante a coluna (caso a tabela tenha sido criada na versão antiga)
+-- garante as colunas (caso a tabela tenha sido criada na versão antiga)
 alter table os_campo add column if not exists numero_fict int;
+alter table os_campo add column if not exists fict_ref text;
 
 -- sequência oficial da contagem fictícia (continua a do almoxarifado)
 create sequence if not exists seq_fict start with 77;
@@ -19,7 +20,7 @@ select setval('seq_fict', greatest(coalesce((select max(numero_fict) from os_cam
 -- recebe o próximo F automaticamente (vale p/ app E p/ n8n)
 create or replace function fpv_atribui_fict() returns trigger as $$
 begin
-  if new.numero is null and new.numero_fict is null then
+  if new.numero is null and new.numero_fict is null and new.fict_ref is null then
     new.numero_fict := nextval('seq_fict');
   end if;
   return new;

@@ -15,7 +15,7 @@ create policy "fpv_gestores_delete" on os_campo
   for delete to authenticated
   using (
     auth.jwt() ->> 'email' in (
-      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'edmar@fpv.app'
+      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'renan@fpv.app', 'edmar@fpv.app'
     )
   );
 
@@ -25,7 +25,7 @@ create policy "almox_delete_restrito" on saida_material
   for delete to authenticated
   using (
     auth.jwt() ->> 'email' in (
-      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'edmar@fpv.app',
+      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'renan@fpv.app', 'edmar@fpv.app',
       'joao@fpv.app'
     )
   );

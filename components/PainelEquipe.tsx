@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Siren, AlertTriangle, Camera, Ruler, CheckCircle2, ArrowRight, Package, Send } from 'lucide-react';
+import { Siren, AlertTriangle, Camera, Ruler, CheckCircle2, ArrowRight, Package, Send, ClipboardCheck } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
 import { medDoMes } from '../config';
 import { supabase } from '../services/supabaseClient';
@@ -188,6 +188,16 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         <Kpi n={zona.filter(o => o.status === 'Concluído').length} rot="concluído" />
       </div>
 
+      <div className="bg-fpv-50 border border-fpv-100 rounded-2xl p-4 text-sm text-fpv-900">
+        <div className="flex items-start gap-3">
+          <ClipboardCheck size={18} className="text-fpv-700 shrink-0 mt-0.5" />
+          <div>
+            <b className="block text-fpv-900">Roteiro simples da equipe</b>
+            <span>1) Abra a prioridade. 2) Execute. 3) Tire foto e escreva a memória. 4) Só conclua quando estiver tudo completo.</span>
+          </div>
+        </div>
+      </div>
+
       {abertas.length > 0 && (
         <div className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-2">
           <Ruler size={14} /> {abertas.length} O.S. em aberto — sem foto e memória de cálculo, NÃO conclui.
@@ -211,7 +221,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
                 <span className="w-12 shrink-0 text-center font-bold text-stone-900 tabular-nums text-sm">{rotulo(o)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-stone-800 truncate">{o.unidade}</div>
-                  <div className="text-[11px] text-stone-400 truncate">{o.servico || o.solicitado || '—'}</div>
+                  <div className="text-[11px] text-stone-400 truncate">{o.solicitado || o.servico || '—'}</div>
                 </div>
                 {o.emergencial && <Siren size={13} className="text-red-500 shrink-0" />}
                 {!(o.foto_urls?.length > 0) && <Camera size={13} className="text-amber-500 shrink-0" />}

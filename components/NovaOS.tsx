@@ -56,7 +56,14 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   const fotoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (editando) setOs({ ...editando });
+    if (editando) {
+      setOs({ ...editando });
+      // evita carregar fotos/kit de um formulário anterior para a O.S. editada
+      setFotos([]);
+      setKit({});
+      setKitAberto(false);
+      setMsg('');
+    }
   }, [editando]);
 
   useEffect(() => {
@@ -372,7 +379,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       <div>
         <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Fotos (antes / depois)</label>
         <input ref={fotoRef} type="file" accept="image/*" multiple className="hidden"
-          onChange={e => { if (e.target.files) setFotos(prev => [...prev, ...Array.from(e.target.files!)].slice(0, 7)); e.target.value = ''; }} />
+          onChange={e => { if (e.target.files) { const selecionadas = Array.from(e.target.files) as File[]; setFotos(prev => [...prev, ...selecionadas].slice(0, 7)); } e.target.value = ''; }} />
         <div className="flex flex-wrap gap-2 items-center">
           <button type="button" onClick={() => fotoRef.current?.click()}
             className="flex items-center gap-2 text-sm font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 px-4 py-2.5 rounded-lg hover:bg-fpv-100">

@@ -32,9 +32,16 @@ create policy "almox_delete" on saida_material for delete to authenticated using
 create index if not exists idx_saida_os_ref on saida_material(os_ref);
 create index if not exists idx_saida_data on saida_material(data);
 
+-- 1b) Colunas atuais da O.S. usadas pelo app
+alter table os_campo add column if not exists solicitado text;
+alter table os_campo add column if not exists area text;
+alter table os_campo add column if not exists tipo text;
+alter table os_campo add column if not exists prioridade int;
+
 -- 2) SEQUÊNCIA FICTÍCIA — garante que a 1ª O.S. real seja F-77.
 --    TRAVA DE SEGURANÇA: só ajusta se ainda NÃO existe nenhuma O.S.
 --    com F-nº no banco (se já existir, não mexe — evita F duplicado).
+create sequence if not exists seq_fict start with 77;
 select case
   when not exists (select 1 from os_campo where numero_fict is not null)
   then setval('seq_fict', 76)

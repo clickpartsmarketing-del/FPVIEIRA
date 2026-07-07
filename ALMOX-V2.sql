@@ -32,7 +32,28 @@ create policy "estoque_insert" on estoque_item for insert to authenticated with 
 create policy "estoque_update" on estoque_item for update to authenticated using (true) with check (true);
 create policy "estoque_delete" on estoque_item for delete to authenticated
   using (auth.jwt() ->> 'email' in
-    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','edmar@fpv.app','joao@fpv.app'));
+    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','renan@fpv.app','edmar@fpv.app','joao@fpv.app'));
+
+
+-- 2b) PALAVRAS-CHAVE / AUTOPREENCHIMENTO APRENDIDO (REV002)
+-- Guarda termos digitados fora do catálogo para aparecerem como sugestão
+-- nas próximas saídas, entradas e cadastros.
+create table if not exists apelido_material (
+  id bigint generated always as identity primary key,
+  digitado text not null unique,
+  canonico text not null,
+  usos int not null default 1,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+alter table apelido_material enable row level security;
+drop policy if exists "apelido_select" on apelido_material;
+drop policy if exists "apelido_insert" on apelido_material;
+drop policy if exists "apelido_update" on apelido_material;
+create policy "apelido_select" on apelido_material for select to authenticated using (true);
+create policy "apelido_insert" on apelido_material for insert to authenticated with check (true);
+create policy "apelido_update" on apelido_material for update to authenticated using (true) with check (true);
+create index if not exists idx_apelido_usos on apelido_material(usos desc);
 
 -- 3) ENTRADA de material (compra/reposição) com foto da NOTA FISCAL
 create table if not exists entrada_material (
@@ -57,7 +78,7 @@ create policy "entrada_insert" on entrada_material for insert to authenticated w
 create policy "entrada_update" on entrada_material for update to authenticated using (true) with check (true);
 create policy "entrada_delete" on entrada_material for delete to authenticated
   using (auth.jwt() ->> 'email' in
-    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','edmar@fpv.app','joao@fpv.app'));
+    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','renan@fpv.app','edmar@fpv.app','joao@fpv.app'));
 
 -- 4) FERRAMENTAS — rastreio: em qual obra está, com quem, desde quando
 create table if not exists ferramenta (
@@ -81,7 +102,7 @@ create policy "ferr_insert" on ferramenta for insert to authenticated with check
 create policy "ferr_update" on ferramenta for update to authenticated using (true) with check (true);
 create policy "ferr_delete" on ferramenta for delete to authenticated
   using (auth.jwt() ->> 'email' in
-    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','edmar@fpv.app','joao@fpv.app'));
+    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','renan@fpv.app','edmar@fpv.app','joao@fpv.app'));
 
 -- 5) SOLICITAÇÕES das equipes (emergência/preventiva) ao almoxarifado
 --    fluxo: PEDIDO (equipe) → SEPARADO (João) → RECEBIDO (equipe confirma)
@@ -105,7 +126,7 @@ create policy "solic_insert" on solicitacao_material for insert to authenticated
 create policy "solic_update" on solicitacao_material for update to authenticated using (true) with check (true);
 create policy "solic_delete" on solicitacao_material for delete to authenticated
   using (auth.jwt() ->> 'email' in
-    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','edmar@fpv.app','joao@fpv.app'));
+    ('lucas@fpv.app','rafael@fpv.app','nicolas@fpv.app','renan@fpv.app','edmar@fpv.app','joao@fpv.app'));
 
 create index if not exists idx_solic_status on solicitacao_material(status);
 create index if not exists idx_entrada_desc on entrada_material(descricao);
@@ -116,4 +137,5 @@ select
   (select case when exists (select 1 from information_schema.tables where table_name='entrada_material') then 'OK' else 'FALTOU' end) as entrada_material,
   (select case when exists (select 1 from information_schema.tables where table_name='ferramenta') then 'OK' else 'FALTOU' end) as ferramenta,
   (select case when exists (select 1 from information_schema.tables where table_name='solicitacao_material') then 'OK' else 'FALTOU' end) as solicitacoes,
-  (select case when exists (select 1 from information_schema.columns where table_name='saida_material' and column_name='destinatario') then 'OK' else 'FALTOU' end) as confirmacao_recebimento;
+  (select case when exists (select 1 from information_schema.columns where table_name='saida_material' and column_name='destinatario') then 'OK' else 'FALTOU' end) as confirmacao_recebimento,
+  (select case when exists (select 1 from information_schema.tables where table_name='apelido_material') then 'OK' else 'FALTOU' end) as apelidos_autocomplete;

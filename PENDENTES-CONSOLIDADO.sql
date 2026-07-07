@@ -16,7 +16,7 @@ create policy "fpv_gestores_delete" on os_campo
   for delete to authenticated
   using (
     auth.jwt() ->> 'email' in (
-      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'edmar@fpv.app'
+      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'renan@fpv.app', 'edmar@fpv.app'
     )
   );
 
@@ -26,15 +26,26 @@ create policy "almox_delete_restrito" on saida_material
   for delete to authenticated
   using (
     auth.jwt() ->> 'email' in (
-      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'edmar@fpv.app',
+      'lucas@fpv.app', 'rafael@fpv.app', 'nicolas@fpv.app', 'renan@fpv.app', 'edmar@fpv.app',
       'joao@fpv.app'
     )
   );
 
 -- ---------------------------------------------------------------------
--- 2) COLUNA area (disciplina) — guia da memória de cálculo EMOP
+-- 2) COLUNAS usadas pelo app atual
 -- ---------------------------------------------------------------------
 alter table os_campo add column if not exists area text;
+alter table os_campo add column if not exists solicitado text;
+alter table os_campo add column if not exists tipo text;
+alter table os_campo add column if not exists prioridade int;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'os_campo_prioridade_1_3') then
+    alter table os_campo add constraint os_campo_prioridade_1_3
+      check (prioridade is null or prioridade between 1 and 3);
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- 3) NUMERAÇÃO POR EQUIPE (L01, L02… Leandro · M01, M02… Miqueias)
@@ -43,6 +54,7 @@ alter table os_campo add column if not exists area text;
 --    recebe erro e o app tenta o seguinte sozinho).
 --    F-77/F-78 antigas continuam como estão (legado exibido igual).
 -- ---------------------------------------------------------------------
+create sequence if not exists seq_fict start with 77;
 alter table os_campo add column if not exists fict_ref text;
 create unique index if not exists ux_os_fict_ref
   on os_campo(fict_ref) where fict_ref is not null;
@@ -57,6 +69,10 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists trg_fict on os_campo;
+create trigger trg_fict before insert on os_campo
+  for each row execute function fpv_atribui_fict();
+
 -- ---------------------------------------------------------------------
 -- 4) CONFERÊNCIA — 1 linha, tudo OK
 -- ---------------------------------------------------------------------
@@ -70,6 +86,12 @@ select
   (select case when exists (select 1 from information_schema.columns
      where table_name = 'os_campo' and column_name = 'area')
      then 'OK' else 'FALTOU' end) as coluna_area,
+  (select case when exists (select 1 from information_schema.columns
+     where table_name = 'os_campo' and column_name = 'solicitado')
+     then 'OK' else 'FALTOU' end) as coluna_solicitado,
+  (select case when exists (select 1 from information_schema.columns
+     where table_name = 'os_campo' and column_name = 'prioridade')
+     then 'OK' else 'FALTOU' end) as coluna_prioridade,
   (select case when exists (select 1 from information_schema.columns
      where table_name = 'os_campo' and column_name = 'fict_ref')
      then 'OK' else 'FALTOU' end) as coluna_ref_equipe;

@@ -46,7 +46,7 @@ const ENTRADA_VAZIA: Entrada = { data: hoje(), descricao: '', quantidade: 1, uni
 
 type SubAba = 'stats' | 'saida' | 'cadastro' | 'estoque' | 'ferramentas' | 'solicitacoes';
 
-const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS, ehGestor = false }) => {
+const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: string }> = ({ listaOS, ehGestor = false, usuario = '' }) => {
   const [sub, setSub] = useState<SubAba>('stats');
   const [saida, setSaida] = useState<Saida>({ ...SAIDA_VAZIA });
   const [saidas, setSaidas] = useState<Saida[]>([]);
@@ -67,6 +67,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
   const [ferrAberta, setFerrAberta] = useState<number | null>(null); // ficha da ferramenta
   const [apelidos, setApelidos] = useState<string[]>([]); // autopreenchimento acumulativo (REV002)
   const [mesFiltro, setMesFiltro] = useState('TODOS'); // histórico por mês (REV002)
+  const podeAjustarContagem = ['nicolas', 'renan'].includes(usuario);
 
   const carregar = async () => {
     const [rs, ri, re, rf, rq] = await Promise.all([
@@ -390,9 +391,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
     ...apelidos,
   ]));
 
-  // trava da medição vigente nas saídas (REV002): mês anterior = só gestão
+  // trava da medição vigente nas saídas (REV002): fora do mês vigente = só gestão
   const mesVigente = hoje().slice(0, 7);
-  const travadaSaida = (s: Saida) => !ehGestor && (s.data || '').slice(0, 7) < mesVigente;
+  const travadaSaida = (s: Saida) => !ehGestor && (s.data || '').slice(0, 7) !== mesVigente;
   const mesesDisponiveis = Array.from(new Set(saidas.map(s => (s.data || '').slice(0, 7)).filter(Boolean))).sort().reverse();
 
   const inputCls = 'w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500';
@@ -680,14 +681,12 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean }> = ({ listaOS
                   {nv && <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${nv.cls}`}>{nv.rot}</span>}
                   <button onClick={() => editarItem(i)} title="Editar descrição/unidade/mínimo"
                     className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
-                  {ehGestor && (
-                    <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (só gestão)"
+                  {podeAjustarContagem && (
+                    <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (só Nicolas/Renan)"
                       className="text-[10px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">🧮</button>
                   )}
-                  {ehGestor && (
-                    <button onClick={() => excluirItem(i)} title="Excluir item (só gestão)"
+                  <button onClick={() => excluirItem(i)} title="Excluir item do catálogo"
                       className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={13} /></button>
-                  )}
                 </div>
               );
             })}

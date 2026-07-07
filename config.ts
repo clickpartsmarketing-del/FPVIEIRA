@@ -8,7 +8,7 @@
 // no repo intacto — religar = trocar para true.
 export const VOZ_ATIVA = false;
 
-export const GESTORES = ['lucas', 'rafael', 'nicolas', 'edmar'];
+export const GESTORES = ['lucas', 'rafael', 'nicolas', 'renan', 'edmar'];
 
 // João só enxerga o Almoxarifado — ele é o responsável pelo estoque,
 // não lança O.S. (gestão também vê a aba p/ acompanhar)

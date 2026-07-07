@@ -12,6 +12,7 @@ interface Props {
   rotuloMinhas?: string;
   restrito?: boolean;   // campo vê SÓ as suas (decisão Renan 05/07) — sem "Todas"
   podeExcluir?: boolean; // AUDITORIA: excluir O.S. (dado de medição!) só gestão
+  podePriorizar?: boolean; // RV000: prioridade operacional definida por Nicolas/Renan
 }
 
 // filtro de status pedido pelo Renan: pendente · executando ·
@@ -53,7 +54,7 @@ const alertaPrazo = (os: OSCampo) => {
   return null;
 };
 
-const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotuloMinhas = 'Minhas O.S.', restrito = false, podeExcluir = false }) => {
+const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotuloMinhas = 'Minhas O.S.', restrito = false, podeExcluir = false, podePriorizar = false }) => {
   const [busca, setBusca] = useState('');
   const [soMinhas, setSoMinhas] = useState(!!filtroMinhas);
   const [filtro, setFiltro] = useState('Todas');
@@ -73,6 +74,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const filtradas = base.filter(os =>
     casaFiltro(os) && (
       !busca ||
+      refDaOS(os).toLowerCase().includes(busca.toLowerCase()) ||
       String(os.numero ?? '').includes(busca) ||
       os.unidade.toLowerCase().includes(busca.toLowerCase()) ||
       (os.executor || '').toLowerCase().includes(busca.toLowerCase())
@@ -258,7 +260,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                   )}
                   {/* PRIORIDADE manual (RV000): a gestão define, o painel do
                       usuário ordena por ela */}
-                  {podeExcluir && (
+                  {podePriorizar && (
                     <p className="flex items-center gap-1.5 pt-1">
                       <b className="text-stone-400 uppercase text-[10px]">Prioridade:</b>
                       {[1, 2, 3].map(p => (

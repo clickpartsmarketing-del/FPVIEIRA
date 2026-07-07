@@ -7,7 +7,16 @@ em PDF para assinatura do fiscal.
 ## 1. Supabase (~5 min)
 
 1. [supabase.com](https://supabase.com) → **New Project** (nome: `fpv-campo`).
-2. **SQL Editor** → New Query → cole e execute o arquivo **`supabase.sql`**.
+2. **SQL Editor** → New Query → cole e execute, nessa ordem:
+   1. **`supabase.sql`**
+   2. **`almoxarifado.sql`**
+   3. **`ALMOX-V2.sql`**
+   4. **`PENDENTES-CONSOLIDADO.sql`**
+   5. **`AUDITORIA-EDICOES.sql`**
+   6. **`REALTIME-E-TIPO.sql`**
+   7. **`AUDITORIA-CORRECOES-2026-07-07.sql`**
+
+   O último arquivo é seguro e idempotente: ele alinha colunas/tabelas usadas pelo app atual sem apagar dados.
 3. **Storage** → New Bucket → nome exato **`fotos-os`** → marcar **Public bucket**.
 4. **Authentication → Users → Add user** → crie os logins (lista sugerida no
    fim do `supabase.sql`). Marque **Auto Confirm User** em cada um.
@@ -53,7 +62,8 @@ Abra http://localhost:5173, entre com um dos logins criados e registre uma O.S. 
 ## 5. Segurança (lições do agro-v7 aplicadas)
 
 - ✅ Login **real** (Supabase Auth) — sem senha no código-fonte.
-- ✅ RLS: só autenticados leem/escrevem (nada de `USING (true)` público).
+- ✅ RLS: só autenticados leem/escrevem (nada de acesso público aos dados).
+- ✅ Exclusão física de O.S. e saídas restrita por policy; no app, O.S. vira marca de exclusão para preservar a numeração.
 - ✅ Chaves só em variável de ambiente — nunca no repositório.
 - ⚠️ A **anon key** do Supabase pode aparecer no bundle do navegador — isso é
   esperado e seguro **desde que o RLS esteja ativo** (está, pelo `supabase.sql`).
