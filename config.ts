@@ -20,15 +20,19 @@ export const ALMOX = ['joao'];
 // Renan 05/07): equipe 1 vê as emergenciais do Renato, equipe 2 as
 // do Wellington — não por executor.
 // prefixo = numeração da equipe (decisão Renan 05/07 à noite): O.S. sem
-// nº oficial nasce L01, L02… (Leandro) / M01, M02… (Miqueias), gerada
+// nº oficial nasce L01, L02… (Leandro) / M01, M02… (equipe 2), gerada
 // pelo sistema — nunca colide com nº de e-mail nem com F-nn do legado.
 // CORREÇÃO Renan 06/07 (teste real): Leandro é a equipe do fiscal
-// WELLINGTON e Miqueias a do RENATO (estava invertido). Logins e senhas
+// WELLINGTON e a equipe 2 a do RENATO (estava invertido). Logins e senhas
 // não mudam — só a zona que cada equipe enxerga.
+// TROCA Renan 07/07: Miqueias SAIU da emergencia2; entrou o eletricista
+// RENATO como encarregado (não confundir com o fiscal Renato, que é da
+// prefeitura e por coincidência tem o mesmo nome). Prefixo M continua —
+// a numeração M-nn não reinicia.
 export interface Equipe { fiscal: string; membros: string[]; prefixo: string; apelido: string; }
 export const EQUIPES: Record<string, Equipe> = {
   emergencia1: { fiscal: 'Wellington', membros: ['Wellington', 'Leandro'], prefixo: 'L', apelido: 'Equipe Leandro' },
-  emergencia2: { fiscal: 'Renato', membros: ['Renato', 'Miqueias', 'Patrick'], prefixo: 'M', apelido: 'Equipe Miqueias' },
+  emergencia2: { fiscal: 'Renato', membros: ['Renato', 'Patrick'], prefixo: 'M', apelido: 'Equipe Renato' },
 };
 
 // Encarregados da CORRETIVA: painel próprio (igual ao emergencial, mas
@@ -45,7 +49,7 @@ export const CORRETIVA: Record<string, Corretiva> = {
 export interface Acesso { rotulo: string; email: string; dica: string; emoji: string; grupo: 'campo' | 'gestao'; }
 export const ACESSOS: Acesso[] = [
   { rotulo: 'Equipe Leandro', email: 'emergencia1@fpv.app', dica: 'emergência · zona Wellington', emoji: '🚨', grupo: 'campo' },
-  { rotulo: 'Equipe Miqueias', email: 'emergencia2@fpv.app', dica: 'emergência · zona Renato', emoji: '🚨', grupo: 'campo' },
+  { rotulo: 'Equipe Renato', email: 'emergencia2@fpv.app', dica: 'emergência · zona Renato', emoji: '🚨', grupo: 'campo' },
   { rotulo: 'Gilson', email: 'gilson@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'Carlos Alberto', email: 'carlosalberto@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'João', email: 'joao@fpv.app', dica: 'almoxarifado', emoji: '📦', grupo: 'campo' },

@@ -164,14 +164,17 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   };
 
   // um destinatário confirma o recebimento no login dele (spec)
-  const DESTINATARIOS = ['Equipe Leandro', 'Equipe Miqueias', ...EXECUTOR_OPTIONS];
+  const DESTINATARIOS = ['Equipe Leandro', 'Equipe Renato', ...EXECUTOR_OPTIONS];
 
   // O JOÃO É O CONTROLADOR DOS EMERGENCIAIS (Renan, 1º teste 06/07):
   // a equipe passa no balcão ANTES de registrar a O.S. — então a
-  // fictícia nasce AQUI: prefixo pela equipe/encarregado que retira
+  // fictícia nasce AQUI: prefixo pela equipe/encarregado que retira.
+  // CORRIGIDO 07/07: renato/wellington estavam com as zonas invertidas
+  // da era pré-v27 (fiscal Wellington = equipe L; fiscal Renato = M).
+  // Renato agora é TAMBÉM o encarregado da equipe M (troca do Miqueias).
   const PREFIXO_DEST: Record<string, string> = {
-    'equipe leandro': 'L', 'leandro': 'L', 'renato': 'L',
-    'equipe miqueias': 'M', 'miqueias': 'M', 'patrick': 'M', 'wellington': 'M',
+    'equipe leandro': 'L', 'leandro': 'L', 'wellington': 'L',
+    'equipe renato': 'M', 'equipe miqueias': 'M', 'renato': 'M', 'miqueias': 'M', 'patrick': 'M',
     'gilson': 'G', 'carlos alberto': 'C',
   };
   const [gerarOS, setGerarOS] = useState(false);

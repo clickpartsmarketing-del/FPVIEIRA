@@ -26,8 +26,10 @@ validação de build acontece na Vercel.
 3. **Datas sempre com `hojeLocal()`** (config.ts). `toISOString().slice(0,10)`
    é proibido — carimba data UTC (amanhã depois das 21h).
 4. **Zonas (correção Renan 06/07):** Equipe Leandro (`emergencia1`, prefixo L)
-   = fiscal **WELLINGTON**; Equipe Miqueias (`emergencia2`, M) = fiscal
-   **RENATO**. Corretiva: Gilson G, Carlos Alberto C. Legado global F-nn
+   = fiscal **WELLINGTON**; Equipe Renato (`emergencia2`, M) = fiscal
+   **RENATO** (o encarregado eletricista Renato ≠ o fiscal Renato da
+   prefeitura — mesmo nome, pessoas diferentes; Miqueias saiu em 07/07).
+   Corretiva: Gilson G, Carlos Alberto C. Legado global F-nn
    (piso 88 calculado no app — `osService.proximaF`).
 5. **Chaves:** anon key só em env da Vercel (aparecer no bundle é ok, RLS
    protege). Service role key NUNCA no repo — mora em
@@ -57,7 +59,7 @@ validação de build acontece na Vercel.
 
 ## Pessoas e logins (@fpv.app, 10)
 
-emergencia1 (Equipe Leandro) · emergencia2 (Equipe Miqueias) · gilson ·
+emergencia1 (Equipe Leandro) · emergencia2 (Equipe Renato) · gilson ·
 carlosalberto · joao (almox) · nicolas (engenharia) · renan · lucas (gestor
 geral) · rafael · edmar (medição). Lista com rótulos: `ACESSOS` em config.ts
 (alimenta o login em 2 toques). Usuário novo = criar no Supabase Auth +
