@@ -13,6 +13,8 @@ validação de build acontece na Vercel.
   REV001/REV002 (almoxarifado). Expansão: `EXPANSAO-5-CONTRATOS.md`.
 - Antes de entregar: consulte `ERROS-E-LICOES.md` (não regrida) e, se mexeu
   em banco, rode `CONFERENCIA-GERAL.sql` no SQL Editor (66 checks, só leitura).
+- Catálogo de comandos, scripts, SQLs e rotinas: **`COMANDOS.md`** — comando
+  novo entra lá no mesmo commit em que nasce.
 
 ## Regras DURAS (decisões travadas — não reverter sem o Renan)
 
