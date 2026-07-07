@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v37';
+const VERSAO = 'v38';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -90,7 +90,9 @@ const App: React.FC = () => {
   // João: SÓ o Almoxarifado — é o dashboard dele, sem O.S./fechamento
   const soAlmox = ALMOX.includes(usuario) && !ehGestor;
   const veAlmox = ALMOX.includes(usuario) || ehGestor;
-  const podePriorizar = ['nicolas', 'renan'].includes(usuario);
+  // prioridade: Nicolas/Renan (RV000) + Lucas por ser o gestor geral
+  // (decisão Renan 07/07)
+  const podePriorizar = ['nicolas', 'renan', 'lucas'].includes(usuario);
   const equipe = EQUIPES[usuario];
   const corretiva = CORRETIVA[usuario];
   // "responsabilidade do autor do painel": encarregado vê as O.S. em

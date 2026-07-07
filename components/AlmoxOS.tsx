@@ -67,7 +67,8 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   const [ferrAberta, setFerrAberta] = useState<number | null>(null); // ficha da ferramenta
   const [apelidos, setApelidos] = useState<string[]>([]); // autopreenchimento acumulativo (REV002)
   const [mesFiltro, setMesFiltro] = useState('TODOS'); // histórico por mês (REV002)
-  const podeAjustarContagem = ['nicolas', 'renan'].includes(usuario);
+  // contagem: Nicolas/Renan (REV001) + Lucas por ser o gestor geral
+  const podeAjustarContagem = ['nicolas', 'renan', 'lucas'].includes(usuario);
 
   const carregar = async () => {
     const [rs, ri, re, rf, rq] = await Promise.all([
@@ -682,7 +683,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                   <button onClick={() => editarItem(i)} title="Editar descrição/unidade/mínimo"
                     className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
                   {podeAjustarContagem && (
-                    <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (só Nicolas/Renan)"
+                    <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (Nicolas/Renan/Lucas)"
                       className="text-[10px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">🧮</button>
                   )}
                   <button onClick={() => excluirItem(i)} title="Excluir item do catálogo"
