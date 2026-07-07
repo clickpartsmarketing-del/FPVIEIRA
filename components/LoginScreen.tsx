@@ -191,6 +191,9 @@ const LoginScreen: React.FC = () => {
         <p className="text-[11px] text-stone-400 mt-6 text-center">
           Acesso criado pela engenharia. Problemas? Fale com o Renan/Nicolas.
         </p>
+        <a href="/treinamento/" className="block text-center text-xs font-bold text-fpv-700 mt-2 underline">
+          📚 Treinamento — aprenda a usar o app
+        </a>
       </div>
     </div>
   );
