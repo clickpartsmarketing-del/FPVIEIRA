@@ -39,6 +39,23 @@ export const CORRETIVA: Record<string, Corretiva> = {
   carlosalberto: { executor: 'Carlos Alberto', prefixo: 'C', apelido: 'Carlos Alberto' },
 };
 
+// LOGIN EM 2 TOQUES (pedido Renan 07/07: "muita recusa" ao digitar o
+// e-mail no celular): a tela de login lista esses nomes — tocar no nome
+// preenche o e-mail e só a SENHA é digitada. Usuário novo? adiciona aqui.
+export interface Acesso { rotulo: string; email: string; dica: string; emoji: string; grupo: 'campo' | 'gestao'; }
+export const ACESSOS: Acesso[] = [
+  { rotulo: 'Equipe Leandro', email: 'emergencia1@fpv.app', dica: 'emergência · zona Wellington', emoji: '🚨', grupo: 'campo' },
+  { rotulo: 'Equipe Miqueias', email: 'emergencia2@fpv.app', dica: 'emergência · zona Renato', emoji: '🚨', grupo: 'campo' },
+  { rotulo: 'Gilson', email: 'gilson@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
+  { rotulo: 'Carlos Alberto', email: 'carlosalberto@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
+  { rotulo: 'João', email: 'joao@fpv.app', dica: 'almoxarifado', emoji: '📦', grupo: 'campo' },
+  { rotulo: 'Nicolas', email: 'nicolas@fpv.app', dica: 'engenharia', emoji: '👷', grupo: 'gestao' },
+  { rotulo: 'Renan', email: 'renan@fpv.app', dica: 'gestão', emoji: '📊', grupo: 'gestao' },
+  { rotulo: 'Lucas', email: 'lucas@fpv.app', dica: 'gestor geral', emoji: '📊', grupo: 'gestao' },
+  { rotulo: 'Rafael', email: 'rafael@fpv.app', dica: 'gestão', emoji: '📊', grupo: 'gestao' },
+  { rotulo: 'Edmar', email: 'edmar@fpv.app', dica: 'medição', emoji: '📐', grupo: 'gestao' },
+];
+
 // Medição vigente pelo calendário: julho/2026 = MED 8, agosto = MED 9…
 // (a 7ª fechou em junho/26 — âncora confirmada pelo Renan em 05/07)
 export const medDoMes = (d = new Date()) =>

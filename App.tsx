@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v38';
+const VERSAO = 'v39';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -149,7 +149,7 @@ const App: React.FC = () => {
         <button onClick={recarregar} title="Atualizar" className="p-2 text-stone-400 hover:text-fpv-600 rounded-lg hover:bg-stone-50">
           <RefreshCw size={18} />
         </button>
-        <button onClick={() => supabase.auth.signOut()} title="Sair" className="p-2 text-stone-400 hover:text-red-500 rounded-lg hover:bg-stone-50">
+        <button onClick={() => { if (confirm('Sair do aplicativo?\nVocê vai precisar digitar a senha de novo para entrar.')) supabase.auth.signOut(); }} title="Sair" className="p-2 text-stone-400 hover:text-red-500 rounded-lg hover:bg-stone-50">
           <LogOut size={18} />
         </button>
       </header>
