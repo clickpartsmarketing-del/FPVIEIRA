@@ -39,7 +39,10 @@ export const TIPO_OPTIONS = ['Emergencial', 'Corretiva', 'Preventiva'];
 export const STATUS_OPTIONS = ['Pendente', 'Executando', 'Assinatura', 'Avaliando', 'Concluído', 'Material', 'Cancelada'];
 export const FISCAL_OPTIONS = ['Wellington', 'Renato', 'Central'];
 export const CLASSIF_OPTIONS = ['Emergencial', 'Urgente', 'Normal'];
-export const EXECUTOR_OPTIONS = ['Gilson', 'Leandro', 'Miqueias', 'Carlos Alberto', 'Renato', 'Patrick', 'Edison', 'Emiliano', 'Matheus', 'Geilton', 'Nicolas', 'Serviço Externo'];
+// REGRA (Renan 07/07): quem sai da operação SAI desta lista — o histórico
+// mora só no banco (os_campo.executor guarda o nome como texto; a busca
+// retroativa consulta os registros, não as opções). Miqueias saiu 07/07.
+export const EXECUTOR_OPTIONS = ['Gilson', 'Leandro', 'Carlos Alberto', 'Renato', 'Patrick', 'Edison', 'Emiliano', 'Matheus', 'Geilton', 'Nicolas', 'Serviço Externo'];
 // só a medição vigente por decisão do Renan (05/07) — valores antigos
 // (MED 7 etc.) continuam visíveis ao editar O.S. que já os têm
 export const MED_OPTIONS = ['', 'MED 8'];

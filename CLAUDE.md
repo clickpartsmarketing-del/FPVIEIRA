@@ -44,6 +44,10 @@ validação de build acontece na Vercel.
    F-nn). Toda tela/planilha nova usa ela, nunca monta a ref na mão.
 10. **RLS:** delete de `os_campo` só gestores; `saida_material` gestores+João.
     Nada de `USING (true)` em delete. Conferir com CONFERENCIA-GERAL.
+11. **Quem sai da operação sai das LISTAS** (EXECUTOR_OPTIONS, ACESSOS,
+    EQUIPES/CORRETIVA) — o histórico mora SÓ no banco: `os_campo.executor`
+    guarda o nome como texto e a busca retroativa consulta os registros,
+    nunca as listas de escolha (decisão Renan 07/07, saída do Miqueias).
 
 ## Convenções de código
 
