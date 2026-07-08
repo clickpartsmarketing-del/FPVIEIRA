@@ -280,7 +280,17 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                       <b className="text-stone-400 uppercase text-[10px]">Designar:</b>
                       {DESIGNADOS.map(d => (
                         <button key={d.executor}
-                          onClick={async () => { await osService.salvar({ ...os, executor: os.executor === d.executor ? '' : d.executor }); aoMudar(); }}
+                          onClick={async () => {
+                            // designar já coloca no QUADRO do painel: sem P
+                            // definida, entra como P3 (decisão Renan 08/07)
+                            const designando = os.executor !== d.executor;
+                            await osService.salvar({
+                              ...os,
+                              executor: designando ? d.executor : '',
+                              prioridade: designando ? (os.prioridade || 3) : os.prioridade,
+                            });
+                            aoMudar();
+                          }}
                           className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.executor === d.executor ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-500 border-stone-200'}`}>
                           {d.rotulo}
                         </button>

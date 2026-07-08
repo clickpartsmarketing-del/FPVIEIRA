@@ -138,18 +138,16 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
   const semMemoria = abertas.filter(o => !(o.memoria_calculo || '').trim());
   const concluidas7d = zona.filter(o => o.status === 'Concluído' && (dias(o.conclusao) ?? 99) <= 7);
 
-  // fila: PRIORIDADE MANUAL da gestão vence tudo (RV000: "determinadas
-  // pelo Nicolas e Renan"); depois emergencial estourada > estourada >
-  // emergencial > mais velha
-  const prioridade = [...abertas].sort((a, b) => {
-    const ma = a.prioridade || 9;
-    const mb = b.prioridade || 9;
-    if (ma !== mb) return ma - mb;
-    const pa = (estourou(a) ? 2 : 0) + (a.emergencial ? 1 : 0);
-    const pb = (estourou(b) ? 2 : 0) + (b.emergencial ? 1 : 0);
-    if (pa !== pb) return pb - pa;
-    return (dias(b.entrada) ?? 0) - (dias(a.entrada) ?? 0);
-  }).slice(0, 8);
+  // QUADRO DE PRIORIDADES (decisão Renan 08/07): entra SÓ o que a gestão
+  // marcou com P1-P3 — designar pelo chip da lista já marca P3 automático.
+  // As Pendentes antigas da zona saem do quadro (ficam nos contadores e
+  // em "Ver todas"); ordem: P > emergencial > mais velha.
+  const prioridade = abertas.filter(o => o.prioridade)
+    .sort((a, b) => {
+      if (a.prioridade !== b.prioridade) return (a.prioridade || 9) - (b.prioridade || 9);
+      if (a.emergencial !== b.emergencial) return a.emergencial ? -1 : 1;
+      return (dias(b.entrada) ?? 0) - (dias(a.entrada) ?? 0);
+    }).slice(0, 8);
 
   const Kpi = ({ n, rot, alerta }: { n: number; rot: string; alerta?: boolean }) => (
     <div className={`rounded-2xl border shadow-sm p-3 text-center ${alerta && n > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-stone-200'}`}>
@@ -210,7 +208,11 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
           <AlertTriangle size={15} className="text-red-600" /> Prioridade agora
         </h3>
         {prioridade.length === 0 && (
-          <p className="text-sm text-stone-400 text-center py-6">Zona limpa — nenhuma O.S. aberta. 💪</p>
+          <p className="text-sm text-stone-400 text-center py-6">
+            {abertas.length === 0
+              ? 'Zona limpa — nenhuma O.S. aberta. 💪'
+              : 'Nada no quadro ainda — quando a gestão designar ou marcar P1–P3, a O.S. aparece aqui.'}
+          </p>
         )}
         <div className="space-y-1.5">
           {prioridade.map(o => {
