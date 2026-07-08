@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
-import { medDoMes, hojeLocal } from '../config';
+import { medDoMes, hojeLocal, DESIGNADOS } from '../config';
 import { osService } from '../services/osService';
 
 interface Props {
@@ -270,6 +270,36 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                         </button>
                       ))}
                       {os.prioridade && <button onClick={async () => { await osService.salvar({ ...os, prioridade: null }); aoMudar(); }} className="text-[11px] text-stone-400 underline">limpar</button>}
+                    </p>
+                  )}
+                  {/* DESIGNAR (Renan 07/07): 1 toque grava o executor e a O.S.
+                      entra na "Prioridade agora" do painel do encarregado.
+                      Toque de novo no mesmo chip = desfaz a designação. */}
+                  {podePriorizar && (
+                    <p className="flex items-center gap-1.5 pt-1 flex-wrap">
+                      <b className="text-stone-400 uppercase text-[10px]">Designar:</b>
+                      {DESIGNADOS.map(d => (
+                        <button key={d.executor}
+                          onClick={async () => { await osService.salvar({ ...os, executor: os.executor === d.executor ? '' : d.executor }); aoMudar(); }}
+                          className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.executor === d.executor ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-500 border-stone-200'}`}>
+                          {d.rotulo}
+                        </button>
+                      ))}
+                      {(() => {
+                        // 📲 Avisar: abre o WhatsApp do designado com a mensagem
+                        // pronta — só aparece quando o zap dele está cadastrado
+                        // no config (DESIGNADOS). O aviso automático via n8n
+                        // (os_campo_log → Evolution) é o passo seguinte na VPS.
+                        const d = DESIGNADOS.find(x => x.executor === os.executor);
+                        if (!d || !d.zap) return null;
+                        const msg = `${d.rotulo}: te passei a O.S. ${refDaOS(os)} — ${os.unidade}. ${os.solicitado || os.servico || ''}${os.prioridade ? ` (P${os.prioridade})` : ''} · https://fpvieira.vercel.app`;
+                        return (
+                          <a href={`https://wa.me/${d.zap}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"
+                            className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-green-50 text-green-700 border-green-200">
+                            📲 Avisar
+                          </a>
+                        );
+                      })()}
                     </p>
                   )}
                 </div>

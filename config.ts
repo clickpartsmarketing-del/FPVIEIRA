@@ -60,6 +60,20 @@ export const ACESSOS: Acesso[] = [
   { rotulo: 'Edmar', email: 'edmar@fpv.app', dica: 'medição', emoji: '📐', grupo: 'gestao' },
 ];
 
+// DESIGNAÇÃO EM 1 TOQUE (pedido Renan 07/07): a gestão escolhe quem toca
+// a O.S. direto no card da lista; junto do P1-P3, isso joga a O.S. na
+// "Prioridade agora" do painel do encarregado (corretiva filtra por
+// EXECUTOR; emergencial já entra pela ZONA do fiscal — o P manda pro topo).
+// zap = WhatsApp com DDI+DDD, só dígitos (ex.: '5522999998888'); enquanto
+// vazio, o botão "📲 Avisar" fica escondido para aquele destino.
+export interface Designado { rotulo: string; executor: string; zap: string; }
+export const DESIGNADOS: Designado[] = [
+  { rotulo: 'Gilson', executor: 'Gilson', zap: '' },
+  { rotulo: 'Carlos Alberto', executor: 'Carlos Alberto', zap: '' },
+  { rotulo: 'Eq. Leandro', executor: 'Leandro', zap: '' },
+  { rotulo: 'Eq. Renato', executor: 'Renato', zap: '' },
+];
+
 // Medição vigente pelo calendário: julho/2026 = MED 8, agosto = MED 9…
 // (a 7ª fechou em junho/26 — âncora confirmada pelo Renan em 05/07)
 export const medDoMes = (d = new Date()) =>
