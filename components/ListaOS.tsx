@@ -273,12 +273,23 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                   e entra no quadro do designado. */}
               {podePriorizar && !travada(os) && (() => {
                 const pd = pend[os.id ?? -1];
-                const pAtual = pd ? pd.p : (os.prioridade ?? null);
-                const eAtual = pd ? pd.exec : (os.executor || '').trim();
-                const mudou = !!pd && (pd.p !== (os.prioridade ?? null) || pd.exec !== (os.executor || '').trim());
+                const salvoP = os.prioridade ?? null;
+                const salvoE = (os.executor || '').trim();
+                const pAtual = pd ? pd.p : salvoP;
+                const eAtual = pd ? pd.exec : salvoE;
+                const mudou = !!pd; // pend só existe quando difere do salvo
                 const jaDesignada = !pd && DESIGNADOS.some(d => d.executor === eAtual) && !!eAtual;
-                const marcaP = (p: number) => setPend(prev => ({ ...prev, [os.id ?? -1]: { p: pAtual === p ? null : p, exec: eAtual } }));
-                const marcaE = (e: string) => { const novo = eAtual === e ? '' : e; setPend(prev => ({ ...prev, [os.id ?? -1]: { exec: novo, p: pAtual ?? (novo ? 3 : null) } })); };
+                // seleção que voltou a ser IGUAL ao salvo → limpa a pendência
+                // (caso real 08/07: tirou e recolocou o mesmo nome e o card
+                // ficava sem ENVIAR e sem selo — parecia travado)
+                const aplica = (novoP: number | null, novoE: string) => setPend(prev => {
+                  const n = { ...prev };
+                  if (novoP === salvoP && novoE === salvoE) delete n[os.id ?? -1];
+                  else n[os.id ?? -1] = { p: novoP, exec: novoE };
+                  return n;
+                });
+                const marcaP = (p: number) => aplica(pAtual === p ? null : p, eAtual);
+                const marcaE = (e: string) => { const novo = eAtual === e ? '' : e; aplica(pAtual ?? (novo ? 3 : null), novo); };
                 return (
                   <div className="mt-2 ml-[4.25rem] flex items-center gap-1.5 flex-wrap">
                     {[1, 2, 3].map(p => (
@@ -295,10 +306,16 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                       </button>
                     ))}
                     {mudou && (
-                      <button onClick={() => enviarDesignacao(os)} disabled={enviandoId === os.id}
-                        className="text-[11px] font-black rounded-full px-3.5 py-1 bg-fpv-600 text-white shadow-md disabled:opacity-50 animate-pulse">
-                        {enviandoId === os.id ? 'Enviando…' : '✔ ENVIAR'}
-                      </button>
+                      <>
+                        <button onClick={() => enviarDesignacao(os)} disabled={enviandoId === os.id}
+                          className="text-[11px] font-black rounded-full px-3.5 py-1 bg-fpv-600 text-white shadow-md disabled:opacity-50 animate-pulse">
+                          {enviandoId === os.id ? 'Enviando…' : '✔ ENVIAR'}
+                        </button>
+                        <button onClick={() => setPend(prev => { const n = { ...prev }; delete n[os.id ?? -1]; return n; })}
+                          className="text-[11px] font-bold text-stone-400 underline">
+                          cancelar
+                        </button>
+                      </>
                     )}
                     {jaDesignada && (
                       <>
