@@ -140,9 +140,16 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
 
   // QUADRO DE PRIORIDADES (decisão Renan 08/07): entra SÓ o que a gestão
   // marcou com P1-P3 — designar pelo chip da lista já marca P3 automático.
-  // As Pendentes antigas da zona saem do quadro (ficam nos contadores e
-  // em "Ver todas"); ordem: P > emergencial > mais velha.
-  const prioridade = abertas.filter(o => o.prioridade)
+  // ROTEAMENTO (caso real 08/07: 1645 da zona Renato designada ao Leandro
+  // não aparecia no painel dele): O.S. COM designado segue o DESIGNADO,
+  // em qualquer zona; SEM designado, segue a zona do fiscal.
+  // Ordem: P > emergencial > mais velha.
+  const prioridade = lista.filter(o => {
+    if (!o.prioridade || o.excluida || ['Concluído', 'Cancelada'].includes(o.status)) return false;
+    const designado = (o.executor || '').trim();
+    if (designado) return cfg.membros.includes(designado);
+    return cfg.filtro(o);
+  })
     .sort((a, b) => {
       if (a.prioridade !== b.prioridade) return (a.prioridade || 9) - (b.prioridade || 9);
       if (a.emergencial !== b.emergencial) return a.emergencial ? -1 : 1;
