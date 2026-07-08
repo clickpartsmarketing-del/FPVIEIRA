@@ -7,6 +7,7 @@ import {
 import { OSCampo, refDaOS } from '../types';
 import { osService } from '../services/osService';
 import { AREAS, areaDaOS, Area, guiaMedida } from '../data/areas';
+import Financeiro from './Financeiro';
 
 // =====================================================================
 // Aba GESTÃO — 3 telas sob medida:
@@ -1202,7 +1203,14 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
 const Gestao: React.FC<Props> = (props) => {
   if (props.papel === 'nicolas') return <TelaEngenheiro {...props} />;
   if (props.papel === 'edmar') return <TelaMedicao {...props} />;
-  return <TelaGestor {...props} />;
+  return (
+    <>
+      <TelaGestor {...props} />
+      {/* 💰 financeiro: SÓ Lucas/Rafael (decisão Renan 08/07 — a trava
+          real é a RLS da contrato_financeiro; aqui é só o gate visual) */}
+      {['lucas', 'rafael'].includes(props.papel) && <Financeiro />}
+    </>
+  );
 };
 
 export default Gestao;

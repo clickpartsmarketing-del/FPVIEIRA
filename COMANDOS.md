@@ -30,6 +30,7 @@ e quando usar. Par do `CLAUDE.md` (identidade) e do `ERROS-E-LICOES.md`
 | `TIPO-ATIVIDADE.sql` | 1 linha (coluna tipo) — já dentro do REALTIME-E-TIPO |
 | `supabase_vps.sql` | P/ quando migrar ao Supabase self-hosted da VPS (n8n compartilha a sequência F) |
 | `estoque_schema.sql` | Referência do módulo Estoque multi-contrato (futuro, DDL completo) |
+| `FINANCEIRO.sql` | Módulo financeiro (v47): tabela `contrato_financeiro` c/ RLS **SÓ Lucas/Rafael** — rodar 1x; valores nunca vão pro código |
 
 Regra: SQL novo = arquivo no repo + idempotente + SELECT de conferência no
 fim + entrada na ordem do DEPLOY.md. SQL "colado no chat" não existe (lição #20).
