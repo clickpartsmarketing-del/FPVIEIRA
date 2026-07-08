@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Siren, AlertTriangle, Camera, Ruler, CheckCircle2, ArrowRight, Package, Send, ClipboardCheck } from 'lucide-react';
+import { Siren, AlertTriangle, Camera, CheckCircle2, ArrowRight, Package, Send, ClipboardCheck } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
 import { medDoMes } from '../config';
 import { supabase } from '../services/supabaseClient';
@@ -132,25 +132,27 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
     const d = dias(o.entrada);
     return d != null && d > (o.emergencial ? 2 : 15);
   };
-  const estouradas = abertas.filter(estourou);
-  // RV000: sem foto INDEPENDENTE do status (não só abertas)
-  const semFoto = zona.filter(o => !(o.foto_urls?.length > 0));
-  const semMemoria = abertas.filter(o => !(o.memoria_calculo || '').trim());
-  const concluidas7d = zona.filter(o => o.status === 'Concluído' && (dias(o.conclusao) ?? 99) <= 7);
 
-  // QUADRO DE PRIORIDADES (decisão Renan 08/07, refinada): entra SÓ o que
-  // foi DESIGNADO a um membro desta equipe (e priorizado). Sem designado
-  // não aparece em painel NENHUM — a fila "A designar" da gestão é quem
-  // segura o que ainda não foi despachado. Ordem: P > emergencial > velha.
-  const prioridade = lista.filter(o => {
+  // PAINEL PESSOAL (decisão Renan 08/07): o colaborador vê SÓ o que é
+  // dele — designadas para fazer + concluídas por ele. O placar da zona
+  // (abertas/estouradas/sem foto/funil) SAIU: era herança da planilha,
+  // assustava sem ser trabalho da equipe. A visão da zona continua na
+  // lista ("Ver todas") e na Gestão.
+  const doQuadro = lista.filter(o => {
     if (!o.prioridade || o.excluida || ['Concluído', 'Cancelada'].includes(o.status)) return false;
     return cfg.membros.includes((o.executor || '').trim());
-  })
+  });
+  const prioridade = [...doQuadro]
     .sort((a, b) => {
       if (a.prioridade !== b.prioridade) return (a.prioridade || 9) - (b.prioridade || 9);
       if (a.emergencial !== b.emergencial) return a.emergencial ? -1 : 1;
       return (dias(b.entrada) ?? 0) - (dias(a.entrada) ?? 0);
     }).slice(0, 8);
+  const minhasConcluidas = lista.filter(o =>
+    !o.excluida && o.status === 'Concluído' &&
+    cfg.membros.includes((o.executor || '').trim()) &&
+    (dias(o.conclusao) ?? 99) <= 7
+  ).sort((a, b) => (dias(a.conclusao) ?? 0) - (dias(b.conclusao) ?? 0));
 
   const Kpi = ({ n, rot, alerta }: { n: number; rot: string; alerta?: boolean }) => (
     <div className={`rounded-2xl border shadow-sm p-3 text-center ${alerta && n > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-stone-200'}`}>
@@ -172,21 +174,10 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         )}
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
-        <Kpi n={abertas.length} rot="abertas" />
-        <Kpi n={estouradas.length} rot="prazo estourado" alerta />
-        <Kpi n={semFoto.length} rot="sem foto" alerta />
-        <Kpi n={concluidas7d.length} rot="concluídas 7d" />
-      </div>
-
-      {/* funil por status (RV000): pendente → executando → assinatura →
-          avaliando → concluído */}
-      <div className="grid grid-cols-5 gap-1.5">
-        <Kpi n={zona.filter(o => ['Pendente', 'Material'].includes(o.status)).length} rot="pendente" />
-        <Kpi n={zona.filter(o => o.status === 'Executando').length} rot="executando" />
-        <Kpi n={zona.filter(o => o.status === 'Assinatura').length} rot="assinatura" />
-        <Kpi n={zona.filter(o => o.status === 'Avaliando').length} rot="avaliando" />
-        <Kpi n={zona.filter(o => o.status === 'Concluído').length} rot="concluído" />
+      {/* placar PESSOAL: só o que é do colaborador (Renan 08/07) */}
+      <div className="grid grid-cols-2 gap-2">
+        <Kpi n={doQuadro.length} rot="para fazer (designadas a você)" alerta />
+        <Kpi n={minhasConcluidas.length} rot="concluídas por você · 7 dias" />
       </div>
 
       <div className="bg-fpv-50 border border-fpv-100 rounded-2xl p-4 text-sm text-fpv-900">
@@ -199,22 +190,13 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         </div>
       </div>
 
-      {abertas.length > 0 && (
-        <div className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-2">
-          <Ruler size={14} /> {abertas.length} O.S. em aberto — sem foto e memória de cálculo, NÃO conclui.
-          {semMemoria.length > 0 && <> ({semMemoria.length} sem memória)</>}
-        </div>
-      )}
-
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4">
         <h3 className="font-bold text-stone-900 text-sm mb-2 flex items-center gap-2">
           <AlertTriangle size={15} className="text-red-600" /> Prioridade agora
         </h3>
         {prioridade.length === 0 && (
           <p className="text-sm text-stone-400 text-center py-6">
-            {abertas.length === 0
-              ? 'Zona limpa — nenhuma O.S. aberta. 💪'
-              : 'Nada no quadro ainda — quando a gestão designar ou marcar P1–P3, a O.S. aparece aqui.'}
+            Nada para fazer agora — quando a gestão te designar uma O.S., ela aparece aqui. 💪
           </p>
         )}
         <div className="space-y-1.5">
@@ -245,6 +227,30 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
           </button>
         )}
       </div>
+
+      {/* CONCLUÍDAS POR VOCÊ (Renan 08/07): senso de progresso + conferência */}
+      {minhasConcluidas.length > 0 && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4">
+          <h3 className="font-bold text-stone-900 text-sm mb-2 flex items-center gap-2">
+            <CheckCircle2 size={15} className="text-fpv-600" /> Concluídas por você · últimos 7 dias
+          </h3>
+          <div className="space-y-1.5">
+            {minhasConcluidas.slice(0, 6).map(o => (
+              <div key={o.id} className="flex items-center gap-2.5 border border-stone-100 rounded-xl px-3 py-2">
+                <span className="w-12 shrink-0 text-center font-bold text-stone-900 tabular-nums text-sm">{rotulo(o)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-stone-800 truncate">{o.unidade}</div>
+                  <div className="text-[11px] text-stone-400 truncate">{o.servico || o.solicitado || '—'}</div>
+                </div>
+                <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">✓ {o.conclusao || 'feita'}</span>
+              </div>
+            ))}
+          </div>
+          {minhasConcluidas.length > 6 && (
+            <p className="text-[11px] text-stone-400 mt-2 text-center">+ {minhasConcluidas.length - 6} concluídas na semana</p>
+          )}
+        </div>
+      )}
 
       <button onClick={aoNovaOS}
         className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm">
