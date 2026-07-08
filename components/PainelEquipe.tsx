@@ -224,29 +224,9 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         )}
       </div>
 
-      {/* CONCLUÍDAS POR VOCÊ (Renan 08/07): senso de progresso + conferência */}
-      {minhasConcluidas.length > 0 && (
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4">
-          <h3 className="font-bold text-stone-900 text-sm mb-2 flex items-center gap-2">
-            <CheckCircle2 size={15} className="text-fpv-600" /> Concluídas por você
-          </h3>
-          <div className="space-y-1.5">
-            {minhasConcluidas.slice(0, 6).map(o => (
-              <div key={o.id} className="flex items-center gap-2.5 border border-stone-100 rounded-xl px-3 py-2">
-                <span className="w-12 shrink-0 text-center font-bold text-stone-900 tabular-nums text-sm">{rotulo(o)}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-stone-800 truncate">{o.unidade}</div>
-                  <div className="text-[11px] text-stone-400 truncate">{o.servico || o.solicitado || '—'}</div>
-                </div>
-                <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">✓ {o.conclusao || 'feita'}</span>
-              </div>
-            ))}
-          </div>
-          {minhasConcluidas.length > 6 && (
-            <p className="text-[11px] text-stone-400 mt-2 text-center">+ {minhasConcluidas.length - 6} concluídas no total</p>
-          )}
-        </div>
-      )}
+      {/* lista de concluídas SAIU do painel (Renan 08/07) — o TOTAL segue
+          no placar de cima; o histórico completo fica na aba de O.S.
+          (filtro "Concluídas") */}
 
       <div className="bg-fpv-50 border border-fpv-100 rounded-2xl p-4 text-sm text-fpv-900">
         <div className="flex items-start gap-3">
