@@ -245,6 +245,42 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                 </div>
               </div>
 
+              {/* COMANDOS DA GESTÃO NO CARD RESUMIDO (pedido Renan 08/07:
+                  Nicolas prioriza e designa SEM precisar expandir o card) */}
+              {podePriorizar && !travada(os) && (
+                <div className="mt-2 ml-[4.25rem] flex items-center gap-1.5 flex-wrap">
+                  {[1, 2, 3].map(p => (
+                    <button key={p} onClick={async () => { await osService.salvar({ ...os, prioridade: os.prioridade === p ? null : p }); aoMudar(); }}
+                      className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.prioridade === p ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-500 border-stone-200'}`}>
+                      P{p}
+                    </button>
+                  ))}
+                  <span className="text-stone-200">·</span>
+                  {DESIGNADOS.map(d => (
+                    <button key={d.executor}
+                      onClick={async () => {
+                        const designando = os.executor !== d.executor;
+                        await osService.salvar({ ...os, executor: designando ? d.executor : '', prioridade: designando ? (os.prioridade || 3) : os.prioridade });
+                        aoMudar();
+                      }}
+                      className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.executor === d.executor ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-500 border-stone-200'}`}>
+                      {d.rotulo.replace('Carlos Alberto', 'C. Alberto').replace('Eq. ', '')}
+                    </button>
+                  ))}
+                  {(() => {
+                    const d = DESIGNADOS.find(x => x.executor === os.executor);
+                    if (!d || !d.zap) return null;
+                    const msg = `${d.rotulo}: te passei a O.S. ${refDaOS(os)} — ${os.unidade}. ${os.solicitado || os.servico || ''}${os.prioridade ? ` (P${os.prioridade})` : ''} · https://fpvieira.vercel.app`;
+                    return (
+                      <a href={`https://wa.me/${d.zap}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"
+                        className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-green-50 text-green-700 border-green-200">
+                        📲 Avisar
+                      </a>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* descrição completa (spec do engenheiro: ver o texto da O.S.
                   do e-mail em qualquer status) — toque no card abre/fecha */}
               {exp && (
@@ -270,60 +306,8 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                   {!os.solicitado && !os.servico && !os.materiais && !os.memoria_calculo && (
                     <p className="text-stone-400">Sem descrição registrada ainda — toque no lápis para completar.</p>
                   )}
-                  {/* PRIORIDADE manual (RV000): a gestão define, o painel do
-                      usuário ordena por ela */}
-                  {podePriorizar && (
-                    <p className="flex items-center gap-1.5 pt-1">
-                      <b className="text-stone-400 uppercase text-[10px]">Prioridade:</b>
-                      {[1, 2, 3].map(p => (
-                        <button key={p} onClick={async () => { await osService.salvar({ ...os, prioridade: os.prioridade === p ? null : p }); aoMudar(); }}
-                          className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.prioridade === p ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-500 border-stone-200'}`}>
-                          P{p}
-                        </button>
-                      ))}
-                      {os.prioridade && <button onClick={async () => { await osService.salvar({ ...os, prioridade: null }); aoMudar(); }} className="text-[11px] text-stone-400 underline">limpar</button>}
-                    </p>
-                  )}
-                  {/* DESIGNAR (Renan 07/07): 1 toque grava o executor e a O.S.
-                      entra na "Prioridade agora" do painel do encarregado.
-                      Toque de novo no mesmo chip = desfaz a designação. */}
-                  {podePriorizar && (
-                    <p className="flex items-center gap-1.5 pt-1 flex-wrap">
-                      <b className="text-stone-400 uppercase text-[10px]">Designar:</b>
-                      {DESIGNADOS.map(d => (
-                        <button key={d.executor}
-                          onClick={async () => {
-                            // designar já coloca no QUADRO do painel: sem P
-                            // definida, entra como P3 (decisão Renan 08/07)
-                            const designando = os.executor !== d.executor;
-                            await osService.salvar({
-                              ...os,
-                              executor: designando ? d.executor : '',
-                              prioridade: designando ? (os.prioridade || 3) : os.prioridade,
-                            });
-                            aoMudar();
-                          }}
-                          className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.executor === d.executor ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-500 border-stone-200'}`}>
-                          {d.rotulo}
-                        </button>
-                      ))}
-                      {(() => {
-                        // 📲 Avisar: abre o WhatsApp do designado com a mensagem
-                        // pronta — só aparece quando o zap dele está cadastrado
-                        // no config (DESIGNADOS). O aviso automático via n8n
-                        // (os_campo_log → Evolution) é o passo seguinte na VPS.
-                        const d = DESIGNADOS.find(x => x.executor === os.executor);
-                        if (!d || !d.zap) return null;
-                        const msg = `${d.rotulo}: te passei a O.S. ${refDaOS(os)} — ${os.unidade}. ${os.solicitado || os.servico || ''}${os.prioridade ? ` (P${os.prioridade})` : ''} · https://fpvieira.vercel.app`;
-                        return (
-                          <a href={`https://wa.me/${d.zap}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"
-                            className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-green-50 text-green-700 border-green-200">
-                            📲 Avisar
-                          </a>
-                        );
-                      })()}
-                    </p>
-                  )}
+                  {/* comandos de prioridade/designação subiram pro card
+                      RESUMIDO (pedido Renan 08/07) — aqui só a leitura */}
                 </div>
               )}
             </div>
