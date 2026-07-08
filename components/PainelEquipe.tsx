@@ -138,17 +138,13 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
   const semMemoria = abertas.filter(o => !(o.memoria_calculo || '').trim());
   const concluidas7d = zona.filter(o => o.status === 'Concluído' && (dias(o.conclusao) ?? 99) <= 7);
 
-  // QUADRO DE PRIORIDADES (decisão Renan 08/07): entra SÓ o que a gestão
-  // marcou com P1-P3 — designar pelo chip da lista já marca P3 automático.
-  // ROTEAMENTO (caso real 08/07: 1645 da zona Renato designada ao Leandro
-  // não aparecia no painel dele): O.S. COM designado segue o DESIGNADO,
-  // em qualquer zona; SEM designado, segue a zona do fiscal.
-  // Ordem: P > emergencial > mais velha.
+  // QUADRO DE PRIORIDADES (decisão Renan 08/07, refinada): entra SÓ o que
+  // foi DESIGNADO a um membro desta equipe (e priorizado). Sem designado
+  // não aparece em painel NENHUM — a fila "A designar" da gestão é quem
+  // segura o que ainda não foi despachado. Ordem: P > emergencial > velha.
   const prioridade = lista.filter(o => {
     if (!o.prioridade || o.excluida || ['Concluído', 'Cancelada'].includes(o.status)) return false;
-    const designado = (o.executor || '').trim();
-    if (designado) return cfg.membros.includes(designado);
-    return cfg.filtro(o);
+    return cfg.membros.includes((o.executor || '').trim());
   })
     .sort((a, b) => {
       if (a.prioridade !== b.prioridade) return (a.prioridade || 9) - (b.prioridade || 9);

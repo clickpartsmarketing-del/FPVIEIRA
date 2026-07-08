@@ -60,6 +60,20 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const [filtro, setFiltro] = useState('Todas');
   const [mostrar, setMostrar] = useState(100); // com a planilha importada são ~1.800 O.S.
   const [aberta, setAberta] = useState<number | null>(null); // card expandido (descrição completa)
+  // DESPACHO EM 2 ETAPAS (Renan 08/07): os chips de P/designado agora são
+  // SELEÇÃO local — só o botão "✔ Enviar" grava e manda pro painel.
+  const [pend, setPend] = useState<Record<number, { p: number | null; exec: string }>>({});
+  const [enviandoId, setEnviandoId] = useState<number | null>(null);
+
+  const enviarDesignacao = async (os: OSCampo) => {
+    const pd = pend[os.id ?? -1];
+    if (!pd || enviandoId) return;
+    setEnviandoId(os.id ?? null);
+    await osService.salvar({ ...os, executor: pd.exec, prioridade: pd.p });
+    setEnviandoId(null);
+    setPend(prev => { const n = { ...prev }; delete n[os.id ?? -1]; return n; });
+    aoMudar();
+  };
 
   // MEDIÇÃO FECHADA = intocável (spec do engenheiro): só a vigente edita.
   // Gestão ainda corrige (com aviso); campo não mexe.
@@ -69,7 +83,15 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const minhas = filtroMinhas ? lista.filter(os => filtroMinhas(os) && os.status !== 'Cancelada') : [];
   const base = filtroMinhas && (soMinhas || restrito) ? minhas : lista;
 
-  const casaFiltro = FILTROS_STATUS.find(f => f.rotulo === filtro)?.casa ?? (() => true);
+  // fila de despacho do Nicolas (só gestão): abertas SEM designado —
+  // depois do "✔ Enviar" a O.S. sai desta fila sozinha
+  const FILTRO_A_DESIGNAR = {
+    rotulo: 'A designar',
+    casa: (os: OSCampo) => !os.excluida && !['Concluído', 'Cancelada'].includes(os.status)
+      && !DESIGNADOS.some(d => d.executor === (os.executor || '').trim()),
+  };
+  const filtros = podePriorizar ? [...FILTROS_STATUS, FILTRO_A_DESIGNAR] : FILTROS_STATUS;
+  const casaFiltro = filtros.find(f => f.rotulo === filtro)?.casa ?? (() => true);
 
   const filtradas = base.filter(os =>
     casaFiltro(os) && (
@@ -167,7 +189,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
 
       {/* filtro por status — conta de cada balde já no botão */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-        {FILTROS_STATUS.map(f => {
+        {filtros.map(f => {
           const n = f.rotulo === 'Todas' ? base.length : base.filter(f.casa).length;
           return (
             <button key={f.rotulo} onClick={() => setFiltro(f.rotulo)}
@@ -245,41 +267,58 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                 </div>
               </div>
 
-              {/* COMANDOS DA GESTÃO NO CARD RESUMIDO (pedido Renan 08/07:
-                  Nicolas prioriza e designa SEM precisar expandir o card) */}
-              {podePriorizar && !travada(os) && (
-                <div className="mt-2 ml-[4.25rem] flex items-center gap-1.5 flex-wrap">
-                  {[1, 2, 3].map(p => (
-                    <button key={p} onClick={async () => { await osService.salvar({ ...os, prioridade: os.prioridade === p ? null : p }); aoMudar(); }}
-                      className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.prioridade === p ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-500 border-stone-200'}`}>
-                      P{p}
-                    </button>
-                  ))}
-                  <span className="text-stone-200">·</span>
-                  {DESIGNADOS.map(d => (
-                    <button key={d.executor}
-                      onClick={async () => {
-                        const designando = os.executor !== d.executor;
-                        await osService.salvar({ ...os, executor: designando ? d.executor : '', prioridade: designando ? (os.prioridade || 3) : os.prioridade });
-                        aoMudar();
-                      }}
-                      className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${os.executor === d.executor ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-500 border-stone-200'}`}>
-                      {d.rotulo.replace('Carlos Alberto', 'C. Alberto').replace('Eq. ', '')}
-                    </button>
-                  ))}
-                  {(() => {
-                    const d = DESIGNADOS.find(x => x.executor === os.executor);
-                    if (!d || !d.zap) return null;
-                    const msg = `${d.rotulo}: te passei a O.S. ${refDaOS(os)} — ${os.unidade}. ${os.solicitado || os.servico || ''}${os.prioridade ? ` (P${os.prioridade})` : ''} · https://fpvieira.vercel.app`;
-                    return (
-                      <a href={`https://wa.me/${d.zap}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"
-                        className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-green-50 text-green-700 border-green-200">
-                        📲 Avisar
-                      </a>
-                    );
-                  })()}
-                </div>
-              )}
+              {/* DESPACHO DA GESTÃO NO CARD RESUMIDO (Renan 08/07): chips
+                  são SELEÇÃO — nada grava até tocar no "✔ Enviar" destacado.
+                  Enviou → executor+P salvos → O.S. sai da fila "A designar"
+                  e entra no quadro do designado. */}
+              {podePriorizar && !travada(os) && (() => {
+                const pd = pend[os.id ?? -1];
+                const pAtual = pd ? pd.p : (os.prioridade ?? null);
+                const eAtual = pd ? pd.exec : (os.executor || '').trim();
+                const mudou = !!pd && (pd.p !== (os.prioridade ?? null) || pd.exec !== (os.executor || '').trim());
+                const jaDesignada = !pd && DESIGNADOS.some(d => d.executor === eAtual) && !!eAtual;
+                const marcaP = (p: number) => setPend(prev => ({ ...prev, [os.id ?? -1]: { p: pAtual === p ? null : p, exec: eAtual } }));
+                const marcaE = (e: string) => { const novo = eAtual === e ? '' : e; setPend(prev => ({ ...prev, [os.id ?? -1]: { exec: novo, p: pAtual ?? (novo ? 3 : null) } })); };
+                return (
+                  <div className="mt-2 ml-[4.25rem] flex items-center gap-1.5 flex-wrap">
+                    {[1, 2, 3].map(p => (
+                      <button key={p} onClick={() => marcaP(p)}
+                        className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${pAtual === p ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-500 border-stone-200'}`}>
+                        P{p}
+                      </button>
+                    ))}
+                    <span className="text-stone-200">·</span>
+                    {DESIGNADOS.map(d => (
+                      <button key={d.executor} onClick={() => marcaE(d.executor)}
+                        className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 ${eAtual === d.executor ? 'bg-fpv-600 text-white border-fpv-600' : 'bg-white text-stone-500 border-stone-200'}`}>
+                        {d.rotulo.replace('Carlos Alberto', 'C. Alberto').replace('Eq. ', '')}
+                      </button>
+                    ))}
+                    {mudou && (
+                      <button onClick={() => enviarDesignacao(os)} disabled={enviandoId === os.id}
+                        className="text-[11px] font-black rounded-full px-3.5 py-1 bg-fpv-600 text-white shadow-md disabled:opacity-50 animate-pulse">
+                        {enviandoId === os.id ? 'Enviando…' : '✔ ENVIAR'}
+                      </button>
+                    )}
+                    {jaDesignada && (
+                      <>
+                        <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5">✔ designada</span>
+                        {(() => {
+                          const d = DESIGNADOS.find(x => x.executor === (os.executor || '').trim());
+                          if (!d || !d.zap) return null;
+                          const msg = `${d.rotulo}: te passei a O.S. ${refDaOS(os)} — ${os.unidade}. ${os.solicitado || os.servico || ''}${os.prioridade ? ` (P${os.prioridade})` : ''} · https://fpvieira.vercel.app`;
+                          return (
+                            <a href={`https://wa.me/${d.zap}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"
+                              className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-green-50 text-green-700 border-green-200">
+                              📲 Avisar
+                            </a>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* descrição completa (spec do engenheiro: ver o texto da O.S.
                   do e-mail em qualquer status) — toque no card abre/fecha */}
