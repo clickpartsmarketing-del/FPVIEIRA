@@ -186,16 +186,6 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         <Kpi n={minhasConcluidas.length} rot="concluídas (total)" />
       </div>
 
-      <div className="bg-fpv-50 border border-fpv-100 rounded-2xl p-4 text-sm text-fpv-900">
-        <div className="flex items-start gap-3">
-          <ClipboardCheck size={18} className="text-fpv-700 shrink-0 mt-0.5" />
-          <div>
-            <b className="block text-fpv-900">Roteiro simples da equipe</b>
-            <span>1) Abra a prioridade. 2) Execute. 3) Tire foto e escreva a memória. 4) Só conclua quando estiver tudo completo.</span>
-          </div>
-        </div>
-      </div>
-
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4">
         <h3 className="font-bold text-stone-900 text-sm mb-2 flex items-center gap-2">
           <AlertTriangle size={15} className="text-red-600" /> Prioridade agora
@@ -257,6 +247,16 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
           )}
         </div>
       )}
+
+      <div className="bg-fpv-50 border border-fpv-100 rounded-2xl p-4 text-sm text-fpv-900">
+        <div className="flex items-start gap-3">
+          <ClipboardCheck size={18} className="text-fpv-700 shrink-0 mt-0.5" />
+          <div>
+            <b className="block text-fpv-900">Roteiro simples da equipe</b>
+            <span>1) Abra a prioridade. 2) Execute. 3) Tire foto e escreva a memória. 4) Só conclua quando estiver tudo completo.</span>
+          </div>
+        </div>
+      </div>
 
       <button onClick={aoNovaOS}
         className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-sm">

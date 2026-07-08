@@ -22,7 +22,8 @@ const FILTROS_STATUS: { rotulo: string; casa: (os: OSCampo) => boolean }[] = [
   { rotulo: 'Pendente', casa: os => os.status === 'Pendente' || os.status === 'Material' },
   { rotulo: 'Executando', casa: os => os.status === 'Executando' },
   { rotulo: 'Pend. assinatura', casa: os => os.status === 'Assinatura' },
-  { rotulo: 'Avaliando', casa: os => os.status === 'Avaliando' },
+  // 'Avaliando' saiu dos chips (Renan 08/07) — o status continua existindo
+  // no formulário/banco; aqui só poluía com (0)
   { rotulo: 'Concluídas', casa: os => os.status === 'Concluído' },
 ];
 
