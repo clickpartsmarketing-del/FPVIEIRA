@@ -22,6 +22,7 @@ export interface OSCampo {
   criado_em?: string;
   assinado?: boolean;
   excluida?: boolean; // marca de exclusão — número preservado, log no banco
+  geo?: string | null; // "lat,lng ±Xm" capturado ao salvar (prova de presença)
   prioridade?: number | null;     // 1..3 — definida pela gestão (RV000)
   par_sugerido?: string | null;   // matchmaking fictícia↔oficial (n8n)
   oficializada_em?: string | null;

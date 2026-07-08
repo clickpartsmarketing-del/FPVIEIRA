@@ -120,13 +120,19 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       setMsg(`🔒 Esta O.S. está na ${os.medicao} (medição FECHADA) — não pode mais ser alterada. Fale com a gestão.`);
       return;
     }
-    // SÓ CONCLUI COMPLETA: sem foto + memória + executor não fecha
+    // SÓ CONCLUI COMPLETA — ajuste Renan 08/07: memória + executor seguem
+    // obrigatórios; FOTO virou confirmável (O.S. chega assinada e a foto
+    // está no grupo do WhatsApp — o campo dá baixa, evidência anexa depois)
     if (!ehGestor && os.status === 'Concluído') {
       const falta: string[] = [];
-      if (os.foto_urls.length + fotos.length === 0) falta.push('foto');
       if (!os.memoria_calculo.trim()) falta.push('memória de cálculo');
       if (!os.executor.trim()) falta.push('executor');
       if (falta.length > 0) { setMsg(`⛔ Para CONCLUIR falta: ${falta.join(' + ')}. Sem as informações a O.S. não será concluída.`); return; }
+      if (os.foto_urls.length + fotos.length === 0 &&
+          !confirm('Concluir SEM FOTO no app?\n\nOK só se a foto já está no GRUPO do WhatsApp — a gestão confere e anexa depois.')) {
+        setMsg('Conclusão pausada — anexe a foto ou confirme que ela está no grupo.');
+        return;
+      }
     }
     // ===== daqui pra baixo é assíncrono: botão TRAVADO =====
     setSalvando(true);
@@ -154,11 +160,24 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     }
     const urls = [...os.foto_urls, ...novas];
 
+    // GEO (Renan 08/07): carimba onde o celular estava ao salvar — prova
+    // de presença na escola. NÃO trava o salvamento: sem sinal ou sem
+    // permissão, segue sem coordenada.
+    const geo = await new Promise<string | null>(res => {
+      if (!('geolocation' in navigator)) return res(null);
+      const t = setTimeout(() => res(null), 4000);
+      navigator.geolocation.getCurrentPosition(
+        p => { clearTimeout(t); res(`${p.coords.latitude.toFixed(6)},${p.coords.longitude.toFixed(6)} ±${Math.round(p.coords.accuracy)}m`); },
+        () => { clearTimeout(t); res(null); },
+        { enableHighAccuracy: true, timeout: 3500, maximumAge: 60000 }
+      );
+    });
+
     // itens do kit entram por escrito nos materiais da O.S. (rastro na própria O.S.)
     const textoKit = itensKit.map(i => `${i.quantidade} ${i.unidade} ${i.descricao}`).join(' + ');
     const materiais = [os.materiais.trim(), textoKit ? `[KIT] ${textoKit}` : ''].filter(Boolean).join('\n');
 
-    const dados = { ...os, materiais, foto_urls: urls, numero: os.numero ? Number(os.numero) : null };
+    const dados = { ...os, materiais, foto_urls: urls, numero: os.numero ? Number(os.numero) : null, ...(geo ? { geo } : {}) };
     // sem nº oficial → numeração automática da equipe/encarregado
     // (L/M emergência · G/C corretiva), gerada no banco
     const resultado = prefixoRef

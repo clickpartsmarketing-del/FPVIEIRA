@@ -92,18 +92,24 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     aoMudar();
   };
 
-  // SÓ CONCLUI COMPLETA (spec do engenheiro): sem foto, memória e executor
-  // não fecha — é o que trava a glosa lá na frente. Gestão pode forçar.
+  // SÓ CONCLUI COMPLETA — ajuste Renan 08/07: memória e executor seguem
+  // OBRIGATÓRIOS (é o dinheiro), mas a FOTO virou CONFIRMÁVEL para o
+  // campo: as O.S. chegam assinadas e a foto já está no grupo do
+  // WhatsApp — o campo dá baixa (antes era a Brendah) e a evidência é
+  // anexada depois pela mineração dos grupos.
   const ocupadoRef = React.useRef(false);
   const concluir = async (os: OSCampo) => {
     if (ocupadoRef.current) return; // anti duplo-toque
     if (!podeExcluir) {
       const falta: string[] = [];
-      if (!(os.foto_urls?.length > 0)) falta.push('foto');
       if (!(os.memoria_calculo || '').trim()) falta.push('memória de cálculo');
       if (!(os.executor || '').trim()) falta.push('executor');
       if (falta.length > 0) {
         alert(`⛔ Para CONCLUIR falta: ${falta.join(' + ')}.\n\nToque no lápis, complete e conclua — sem as informações a O.S. não será concluída.`);
+        return;
+      }
+      if (!(os.foto_urls?.length > 0) &&
+          !confirm(`Concluir a ${refDaOS(os)} SEM FOTO no app?\n\nOK só se a foto já está no GRUPO do WhatsApp — a gestão confere e anexa depois.`)) {
         return;
       }
     }
@@ -248,6 +254,12 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                   {os.materiais && <p><b className="text-stone-400 uppercase text-[10px]">Materiais: </b>{os.materiais}</p>}
                   {os.memoria_calculo && <p><b className="text-stone-400 uppercase text-[10px]">Memória: </b>{os.memoria_calculo}</p>}
                   <p><b className="text-stone-400 uppercase text-[10px]">Fiscal: </b>{os.fiscal || '—'} · <b className="text-stone-400 uppercase text-[10px]">Entrada: </b>{os.entrada || '—'} · <b className="text-stone-400 uppercase text-[10px]">Conclusão: </b>{os.conclusao || '—'}</p>
+                  {os.geo && (
+                    <p><b className="text-stone-400 uppercase text-[10px]">Local do registro: </b>
+                      <a href={`https://maps.google.com/?q=${os.geo.split(' ')[0]}`} target="_blank" rel="noreferrer" className="text-fpv-700 font-bold underline">📍 abrir no mapa</a>
+                      <span className="text-stone-400"> ({os.geo})</span>
+                    </p>
+                  )}
                   {os.foto_urls?.length > 0 && (
                     <p className="flex gap-2 flex-wrap">
                       {os.foto_urls.map((u, i) => (

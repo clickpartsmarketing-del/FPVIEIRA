@@ -34,10 +34,10 @@ export const osService = {
 
     if (os.id) {
       let { error } = await supabase.from('os_campo').update(payload).eq('id', os.id);
-      // resiliência: banco sem a coluna 'area' ainda → tira e salva mesmo assim
-      if (error && /'area'/i.test(error.message)) {
+      // resiliência: banco sem coluna nova ainda ('area'/'geo') → tira e salva
+      if (error && /'(area|geo)'/i.test(error.message)) {
         const p2: any = { ...payload };
-        delete p2.area;
+        delete p2.area; delete p2.geo;
         ({ error } = await supabase.from('os_campo').update(p2).eq('id', os.id));
       }
       return { ok: !error, erro: error?.message };
@@ -72,6 +72,12 @@ export const osService = {
     // sem 'area' → tira e re-insere
     if (error && /'area'/i.test(error.message)) {
       delete base.area;
+      ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
+    }
+
+    // sem 'geo' (GEO-COLUNA.sql pendente) → tira e re-insere
+    if (error && /'geo'/i.test(error.message)) {
+      delete base.geo;
       ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
     }
 
