@@ -68,9 +68,7 @@ export const ACESSOS: Acesso[] = [
 // vazio, o botão "📲 Avisar" fica escondido para aquele destino.
 export interface Designado { rotulo: string; executor: string; zap: string; }
 export const DESIGNADOS: Designado[] = [
-  // ⚠️ zap do Gilson veio com 12 dígitos (os demais têm 13) — conferir se
-  // falta o 9 do celular (Renan, 07/07)
-  { rotulo: 'Gilson', executor: 'Gilson', zap: '552298952800' },
+  { rotulo: 'Gilson', executor: 'Gilson', zap: '5522998952800' },
   { rotulo: 'Carlos Alberto', executor: 'Carlos Alberto', zap: '5522998294178' },
   { rotulo: 'Eq. Leandro', executor: 'Leandro', zap: '5522992455522' },
   { rotulo: 'Eq. Renato', executor: 'Renato', zap: '5522998888452' },
