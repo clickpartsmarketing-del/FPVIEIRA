@@ -148,11 +148,15 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
       if (a.emergencial !== b.emergencial) return a.emergencial ? -1 : 1;
       return (dias(b.entrada) ?? 0) - (dias(a.entrada) ?? 0);
     }).slice(0, 8);
+  // Assinatura + Concluídas GERAIS da base (ajuste Renan 08/07: o recorte
+  // de 7 dias não interessava — vale o total do colaborador)
+  const minhasAssinatura = lista.filter(o =>
+    !o.excluida && o.status === 'Assinatura' &&
+    cfg.membros.includes((o.executor || '').trim()));
   const minhasConcluidas = lista.filter(o =>
     !o.excluida && o.status === 'Concluído' &&
-    cfg.membros.includes((o.executor || '').trim()) &&
-    (dias(o.conclusao) ?? 99) <= 7
-  ).sort((a, b) => (dias(a.conclusao) ?? 0) - (dias(b.conclusao) ?? 0));
+    cfg.membros.includes((o.executor || '').trim())
+  ).sort((a, b) => (dias(a.conclusao) ?? 9999) - (dias(b.conclusao) ?? 9999));
 
   const Kpi = ({ n, rot, alerta }: { n: number; rot: string; alerta?: boolean }) => (
     <div className={`rounded-2xl border shadow-sm p-3 text-center ${alerta && n > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-stone-200'}`}>
@@ -174,10 +178,12 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         )}
       </div>
 
-      {/* placar PESSOAL: só o que é do colaborador (Renan 08/07) */}
-      <div className="grid grid-cols-2 gap-2">
-        <Kpi n={doQuadro.length} rot="para fazer (designadas a você)" alerta />
-        <Kpi n={minhasConcluidas.length} rot="concluídas por você · 7 dias" />
+      {/* placar PESSOAL — as 3 confirmações (Renan 08/07): designadas
+          para fazer · em assinatura · concluídas (total na base) */}
+      <div className="grid grid-cols-3 gap-2">
+        <Kpi n={doQuadro.length} rot="para fazer (designadas)" alerta />
+        <Kpi n={minhasAssinatura.length} rot="em assinatura" />
+        <Kpi n={minhasConcluidas.length} rot="concluídas (total)" />
       </div>
 
       <div className="bg-fpv-50 border border-fpv-100 rounded-2xl p-4 text-sm text-fpv-900">
@@ -232,7 +238,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
       {minhasConcluidas.length > 0 && (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4">
           <h3 className="font-bold text-stone-900 text-sm mb-2 flex items-center gap-2">
-            <CheckCircle2 size={15} className="text-fpv-600" /> Concluídas por você · últimos 7 dias
+            <CheckCircle2 size={15} className="text-fpv-600" /> Concluídas por você
           </h3>
           <div className="space-y-1.5">
             {minhasConcluidas.slice(0, 6).map(o => (
@@ -247,7 +253,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
             ))}
           </div>
           {minhasConcluidas.length > 6 && (
-            <p className="text-[11px] text-stone-400 mt-2 text-center">+ {minhasConcluidas.length - 6} concluídas na semana</p>
+            <p className="text-[11px] text-stone-400 mt-2 text-center">+ {minhasConcluidas.length - 6} concluídas no total</p>
           )}
         </div>
       )}
