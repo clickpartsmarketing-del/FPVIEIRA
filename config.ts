@@ -68,10 +68,12 @@ export const ACESSOS: Acesso[] = [
 // vazio, o botão "📲 Avisar" fica escondido para aquele destino.
 export interface Designado { rotulo: string; executor: string; zap: string; }
 export const DESIGNADOS: Designado[] = [
-  { rotulo: 'Gilson', executor: 'Gilson', zap: '' },
-  { rotulo: 'Carlos Alberto', executor: 'Carlos Alberto', zap: '' },
-  { rotulo: 'Eq. Leandro', executor: 'Leandro', zap: '' },
-  { rotulo: 'Eq. Renato', executor: 'Renato', zap: '' },
+  // ⚠️ zap do Gilson veio com 12 dígitos (os demais têm 13) — conferir se
+  // falta o 9 do celular (Renan, 07/07)
+  { rotulo: 'Gilson', executor: 'Gilson', zap: '552298952800' },
+  { rotulo: 'Carlos Alberto', executor: 'Carlos Alberto', zap: '5522998294178' },
+  { rotulo: 'Eq. Leandro', executor: 'Leandro', zap: '5522992455522' },
+  { rotulo: 'Eq. Renato', executor: 'Renato', zap: '5522998888452' },
 ];
 
 // Medição vigente pelo calendário: julho/2026 = MED 8, agosto = MED 9…
