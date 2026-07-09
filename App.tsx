@@ -17,7 +17,7 @@ type Aba = 'chat' | 'nova' | 'lista' | 'almox' | 'gestao' | 'fechamento' | 'pain
 
 // versão visível no cabeçalho — se o campo reportar tela antiga,
 // primeiro confere este número (cache de bundle no celular!)
-const VERSAO = 'v56';
+const VERSAO = 'v57';
 
 // casa o prefixo do e-mail com o nome do executor (gilson → Gilson,
 // carlosalberto → Carlos Alberto) p/ a visão "Minhas O.S." do encarregado
@@ -100,11 +100,11 @@ const App: React.FC = () => {
   // FISCAL (zona) — decisão Renan 05/07
   const meuExecutor = ehGestor || equipe ? undefined
     : corretiva?.executor ?? EXECUTOR_OPTIONS.find(e => normaliza(e) === normaliza(usuario));
-  // equipe vê TODAS as O.S. da zona do seu fiscal (não só as com flag
-  // emergencial — as 1.794 importadas da planilha não têm a flag e
-  // sumiam da tela; correção do "sumiu tudo" do v18)
+  // "Minhas O.S." é PESSOAL (decisão Renan 08/07, fecha a segmentação):
+  // equipe vê as O.S. cujo executor é um MEMBRO dela; encarregado vê as
+  // dele. A zona inteira ficou para a Gestão — aqui só o que é de cada um.
   const filtroMinhas = ehGestor ? undefined
-    : equipe ? (os: OSCampo) => os.fiscal === equipe.fiscal
+    : equipe ? (os: OSCampo) => equipe.membros.includes((os.executor || '').trim())
     : meuExecutor ? (os: OSCampo) => os.executor === meuExecutor
     : undefined;
   // painel de campo: equipes de emergência (por zona) E corretiva (por
@@ -204,7 +204,7 @@ const App: React.FC = () => {
             aoEditar={(os) => { setEditando(os); setAba('nova'); }}
             aoMudar={recarregar}
             filtroMinhas={filtroMinhas}
-            rotuloMinhas={equipe ? `O.S. da zona · fiscal ${equipe.fiscal}` : 'Minhas O.S.'}
+            rotuloMinhas={equipe ? `O.S. da ${equipe.apelido}` : 'Minhas O.S.'}
             restrito={!ehGestor && !!filtroMinhas}
             podeExcluir={ehGestor}
             podePriorizar={podePriorizar}

@@ -219,7 +219,7 @@ const PainelEquipe: React.FC<Props> = ({ lista, cfg, aoVerLista, aoNovaOS }) => 
         </div>
         {abertas.length > 0 && (
           <button onClick={aoVerLista} className="w-full text-xs font-bold text-fpv-700 pt-3 flex items-center justify-center gap-1">
-            Ver todas da zona <ArrowRight size={13} />
+            Ver todas as suas O.S. <ArrowRight size={13} />
           </button>
         )}
       </div>
