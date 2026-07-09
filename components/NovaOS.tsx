@@ -390,8 +390,33 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
         {(os.servico || os.solicitado) && (
           <p className="text-[11px] text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-lg px-2.5 py-1.5 mb-1.5">📐 {guia}</p>
         )}
+        {/* ATALHOS DA MEMÓRIA (Renan 09/07): o peão com dificuldade monta a
+            memória em TOQUES — começa pelo serviço já registrado, soma os
+            materiais e o molde da medida; só completa os números. */}
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          {!os.memoria_calculo.trim() && (os.servico || os.solicitado) && (
+            <button type="button"
+              onClick={() => campo('memoria_calculo', `${(os.servico || os.solicitado || '').trim()} — `)}
+              className="text-[11px] font-bold bg-fpv-600 text-white rounded-full px-3 py-1.5">
+              ⚡ Começar pelo serviço
+            </button>
+          )}
+          {os.materiais.trim() !== '' && (
+            <button type="button"
+              onClick={() => campo('memoria_calculo', `${os.memoria_calculo.trim()}${os.memoria_calculo.trim() ? '\n' : ''}Materiais: ${os.materiais.trim()} — `)}
+              className="text-[11px] font-bold bg-white text-fpv-700 border border-fpv-200 rounded-full px-3 py-1.5">
+              + materiais usados
+            </button>
+          )}
+          <button type="button" onClick={() => campo('memoria_calculo', `${os.memoria_calculo} ___ x ___ = ___ m²`.trim())}
+            className="text-[11px] font-bold bg-white text-stone-600 border border-stone-200 rounded-full px-3 py-1.5">+ m² (L×A)</button>
+          <button type="button" onClick={() => campo('memoria_calculo', `${os.memoria_calculo} ___ m lineares`.trim())}
+            className="text-[11px] font-bold bg-white text-stone-600 border border-stone-200 rounded-full px-3 py-1.5">+ metros</button>
+          <button type="button" onClick={() => campo('memoria_calculo', `${os.memoria_calculo} ___ und`.trim())}
+            className="text-[11px] font-bold bg-white text-stone-600 border border-stone-200 rounded-full px-3 py-1.5">+ unidades</button>
+        </div>
         <textarea value={os.memoria_calculo} onChange={e => campo('memoria_calculo', e.target.value)} rows={3}
-          placeholder="ex.: parede 3,85 × 1,20 = 4,62 m² · rodapé 7 m lineares · 2 und porta 0,80"
+          placeholder="toque nos botões acima e complete os números — ex.: parede 3,85 × 1,20 = 4,62 m²"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500 resize-y" />
       </div>
 
