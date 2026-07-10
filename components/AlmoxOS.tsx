@@ -223,6 +223,18 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     setSalvando(false);
     if (error) { setMsg('Erro: ' + error.message); return; }
 
+    // SAIU MATERIAL = ESTÁ EXECUTANDO (regra Renan 10/07): O.S. Pendente
+    // vinculada à saída muda de status sozinha — retirar material no
+    // balcão é o sinal de que o serviço começou.
+    let msgStatus = '';
+    if (osRef) {
+      const alvo = listaOS.find(o => refDaOS(o) === osRef && o.status === 'Pendente' && !o.excluida);
+      if (alvo && alvo.id) {
+        const { error: es } = await supabase.from('os_campo').update({ status: 'Executando' }).eq('id', alvo.id);
+        if (!es) msgStatus = ` · O.S. ${osRef} passou p/ EXECUTANDO`;
+      }
+    }
+
     // REV002: material FORA do estoque → alerta + cadastro automático
     // com saldo NEGATIVO até a contagem real (gestão ajusta no 🧮)
     let alertaCad = '';
@@ -245,7 +257,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       }
     }
 
-    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${osRef ? ' → O.S. ' + osRef : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}${alertaCad}`);
+    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${osRef ? ' → O.S. ' + osRef : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}${alertaCad}${msgStatus}`);
     setGerarOS(false);
     setSaida(p => ({ ...SAIDA_VAZIA, data: p.data, escola: p.escola, os_ref: osRef, origem: p.origem }));
     carregar();
