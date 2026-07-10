@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
 import { OSCampo, refDaOS } from '../types';
 import { medDoMes, hojeLocal, DESIGNADOS } from '../config';
 import { osService } from '../services/osService';
+import { supabase } from '../services/supabaseClient';
 
 interface Props {
   lista: OSCampo[];
@@ -76,6 +77,61 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     aoMudar();
   };
 
+  // ============ MATCHMAKING FICTÍCIA ↔ OFICIAL (v63, Renan 10/07) ============
+  // Regra dos 80% sem IA: fictícia aberta casa com O.S. oficial por MESMA
+  // ESCOLA + entrada em ±7 dias (a mais próxima em data vence). A gestão
+  // só arbitra com 1 toque — ninguém digita nada.
+  const paresSugeridos = useMemo(() => {
+    const mapa = new Map<number, OSCampo>();
+    if (!podePriorizar) return mapa;
+    const nrm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const difDias = (a: string, b: string) => Math.abs((new Date(a).getTime() - new Date(b).getTime()) / 86400000);
+    const oficiais = lista.filter(o => o.numero != null && !o.excluida && !o.par_sugerido && o.entrada);
+    const ficts = lista.filter(o => o.numero == null && !o.excluida && o.status !== 'Cancelada' && (o.fict_ref || o.numero_fict) && o.entrada);
+    for (const f of ficts) {
+      const tok = nrm(f.unidade).split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+      if (tok.length === 0) continue;
+      let melhor: OSCampo | null = null; let melhorDist = 8;
+      for (const o of oficiais) {
+        const d = difDias(f.entrada!, o.entrada!);
+        if (d > 7) continue;
+        const alvo = nrm(o.unidade);
+        const hits = tok.filter(t => alvo.includes(t)).length;
+        if (hits < Math.ceil(tok.length * 0.5)) continue;
+        if (d < melhorDist) { melhorDist = d; melhor = o; }
+      }
+      if (melhor && f.id != null) mapa.set(f.id, melhor);
+    }
+    return mapa;
+  }, [lista, podePriorizar]);
+
+  // confirma o par: a OFICIAL herda a evidência da fictícia; a fictícia
+  // vira marca "oficializada" (número eterno preservado, razão registra)
+  const oficializar = async (f: OSCampo, o: OSCampo) => {
+    if (!confirm(`Confirmar que a ${refDaOS(f)} é a O.S. oficial ${o.numero}?\n\nFotos, memória e status da ${refDaOS(f)} passam para a ${o.numero}; a ${refDaOS(f)} vira marca de oficializada (número preservado no razão).`)) return;
+    const fotos = Array.from(new Set([...(o.foto_urls || []), ...(f.foto_urls || [])]));
+    const upd: Partial<OSCampo> = {
+      foto_urls: fotos,
+      servico: (o.servico || '').trim() || (f.servico || ''),
+      memoria_calculo: (o.memoria_calculo || '').trim() || (f.memoria_calculo || ''),
+      materiais: [(o.materiais || '').trim(), (f.materiais || '').trim()].filter(Boolean).join('\n'),
+      executor: (o.executor || '').trim() || (f.executor || ''),
+      prioridade: o.prioridade ?? f.prioridade ?? null,
+      par_sugerido: refDaOS(f),
+      oficializada_em: new Date().toISOString(),
+    };
+    if (o.status === 'Pendente' && f.status !== 'Pendente') { upd.status = f.status; if (f.conclusao) upd.conclusao = f.conclusao; }
+    await supabase.from('os_campo').update(upd).eq('id', o.id);
+    await supabase.from('os_campo').update({ excluida: true, status: 'Cancelada', par_sugerido: String(o.numero) }).eq('id', f.id);
+    aoMudar();
+  };
+
+  // sem par ainda: texto pronto p/ cobrar o nº oficial do fiscal
+  const copiarCobranca = (f: OSCampo) => {
+    const txt = `Fiscal ${f.fiscal || ''}: favor emitir a O.S. para o atendimento ${refDaOS(f)} — ${f.unidade} — ${(f.solicitado || f.servico || '').trim()}${f.conclusao ? `, executado em ${f.conclusao}` : ''}.`;
+    try { navigator.clipboard.writeText(txt); alert('📋 Texto copiado — cole no WhatsApp do fiscal.'); } catch { prompt('Copie o texto:', txt); }
+  };
+
   // MEDIÇÃO FECHADA = intocável (spec do engenheiro): só a vigente edita.
   // Gestão ainda corrige (com aviso); campo não mexe.
   const medicaoFechada = (os: OSCampo) => !!(os.medicao || '').trim() && os.medicao !== medDoMes();
@@ -91,7 +147,11 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     casa: (os: OSCampo) => !os.excluida && !['Concluído', 'Cancelada'].includes(os.status)
       && !DESIGNADOS.some(d => d.executor === (os.executor || '').trim()),
   };
-  const filtros = podePriorizar ? [...FILTROS_STATUS, FILTRO_A_DESIGNAR] : FILTROS_STATUS;
+  const FILTRO_AGUARDANDO_N = {
+    rotulo: 'Aguardando nº',
+    casa: (os: OSCampo) => os.numero == null && !os.excluida && os.status !== 'Cancelada',
+  };
+  const filtros = podePriorizar ? [...FILTROS_STATUS, FILTRO_A_DESIGNAR, FILTRO_AGUARDANDO_N] : FILTROS_STATUS;
   const casaFiltro = filtros.find(f => f.rotulo === filtro)?.casa ?? (() => true);
 
   // BUSCA ABERTA (decisão Renan 10/07, caso real do Gilson com a O.S. no
@@ -344,6 +404,32 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                           );
                         })()}
                       </>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* MATCHMAKING (v63): fictícia com provável par oficial ganha o
+                  chip de confirmação; sem par, o botão de cobrar o nº */}
+              {podePriorizar && os.numero == null && !os.excluida && os.status !== 'Cancelada' && (() => {
+                const par = paresSugeridos.get(os.id ?? -1);
+                return (
+                  <div className="mt-1.5 ml-[4.25rem] flex items-center gap-1.5 flex-wrap">
+                    {par ? (
+                      <>
+                        <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+                          🔗 provável par: O.S. {par.numero} · mesma escola · entrada {par.entrada || '—'}
+                        </span>
+                        <button onClick={() => oficializar(os, par)}
+                          className="text-[11px] font-black rounded-full px-3 py-1 bg-fpv-600 text-white shadow">
+                          ✔ confirmar par
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => copiarCobranca(os)}
+                        className="text-[11px] font-bold text-stone-500 bg-white border border-stone-200 rounded-full px-2.5 py-0.5">
+                        📋 copiar cobrança do nº p/ o fiscal
+                      </button>
                     )}
                   </div>
                 );
