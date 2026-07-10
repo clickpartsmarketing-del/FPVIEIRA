@@ -94,7 +94,13 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const filtros = podePriorizar ? [...FILTROS_STATUS, FILTRO_A_DESIGNAR] : FILTROS_STATUS;
   const casaFiltro = filtros.find(f => f.rotulo === filtro)?.casa ?? (() => true);
 
-  const filtradas = base.filter(os =>
+  // BUSCA ABERTA (decisão Renan 10/07, caso real do Gilson com a O.S. no
+  // papel que "não existia"): digitou na busca? A pesquisa varre TODAS as
+  // O.S. do banco — veteranos trocam serviços e precisam achar qualquer
+  // uma. A lista padrão continua PESSOAL e o painel não muda em nada.
+  const buscando = busca.trim() !== '';
+  const baseBusca = buscando ? lista : base;
+  const filtradas = baseBusca.filter(os =>
     casaFiltro(os) && (
       !busca ||
       refDaOS(os).toLowerCase().includes(busca.toLowerCase()) ||
@@ -209,6 +215,11 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
         </p>
       )}
 
+      {buscando && restrito && (
+        <p className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-lg px-2.5 py-1.5 mb-2">
+          🔎 Buscando em TODAS as O.S. do banco ({filtradas.length} encontradas) — apague a busca para voltar às suas.
+        </p>
+      )}
       {filtradas.length === 0 && (
         <p className="text-sm text-stone-400 text-center py-8">
           {filtro !== 'Todas' ? `Nenhuma O.S. em "${filtro}".`
