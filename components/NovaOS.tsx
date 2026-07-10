@@ -57,7 +57,18 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
   useEffect(() => {
     if (editando) {
-      setOs({ ...editando });
+      // NORMALIZA NULLS (crash real 10/07: O.S. inseridas pelo n8n vêm com
+      // NULL onde o app grava '' — a 1839 abria em TELA CINZA no .trim())
+      const t = (v: any) => (v == null ? '' : String(v));
+      setOs({
+        ...editando,
+        unidade: t(editando.unidade), fiscal: t(editando.fiscal),
+        classificacao: t(editando.classificacao), executor: t(editando.executor),
+        status: t(editando.status) || 'Executando', medicao: t(editando.medicao),
+        solicitado: t(editando.solicitado), servico: t(editando.servico),
+        materiais: t(editando.materiais), memoria_calculo: t(editando.memoria_calculo),
+        foto_urls: editando.foto_urls || [],
+      });
       // evita carregar fotos/kit de um formulário anterior para a O.S. editada
       setFotos([]);
       setKit({});
@@ -145,10 +156,10 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     // está no grupo do WhatsApp — o campo dá baixa, evidência anexa depois)
     if (!ehGestor && os.status === 'Concluído') {
       const falta: string[] = [];
-      if (!os.memoria_calculo.trim()) falta.push('memória de cálculo');
-      if (!os.executor.trim()) falta.push('executor');
+      if (!(os.memoria_calculo || '').trim()) falta.push('memória de cálculo');
+      if (!(os.executor || '').trim()) falta.push('executor');
       if (falta.length > 0) { setMsg(`⛔ Para CONCLUIR falta: ${falta.join(' + ')}. Sem as informações a O.S. não será concluída.`); return; }
-      if (os.foto_urls.length + fotos.length === 0 &&
+      if ((os.foto_urls?.length || 0) + fotos.length === 0 &&
           !confirm('Concluir SEM FOTO no app?\n\nOK só se a foto já está no GRUPO do WhatsApp — a gestão confere e anexa depois.')) {
         setMsg('Conclusão pausada — anexe a foto ou confirme que ela está no grupo.');
         return;
@@ -426,16 +437,16 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
             memória em TOQUES — começa pelo serviço já registrado, soma os
             materiais e o molde da medida; só completa os números. */}
         <div className="flex flex-wrap gap-1.5 mb-1.5">
-          {!os.memoria_calculo.trim() && (os.servico || os.solicitado) && (
+          {!(os.memoria_calculo || '').trim() && (os.servico || os.solicitado) && (
             <button type="button"
               onClick={() => campo('memoria_calculo', `${(os.servico || os.solicitado || '').trim()} — `)}
               className="text-[11px] font-bold bg-fpv-600 text-white rounded-full px-3 py-1.5">
               ⚡ Começar pelo serviço
             </button>
           )}
-          {os.materiais.trim() !== '' && (
+          {(os.materiais || '').trim() !== '' && (
             <button type="button"
-              onClick={() => campo('memoria_calculo', `${os.memoria_calculo.trim()}${os.memoria_calculo.trim() ? '\n' : ''}Materiais: ${os.materiais.trim()} — `)}
+              onClick={() => campo('memoria_calculo', `${(os.memoria_calculo || '').trim()}${(os.memoria_calculo || '').trim() ? '\n' : ''}Materiais: ${(os.materiais || '').trim()} — `)}
               className="text-[11px] font-bold bg-white text-fpv-700 border border-fpv-200 rounded-full px-3 py-1.5">
               + materiais usados
             </button>

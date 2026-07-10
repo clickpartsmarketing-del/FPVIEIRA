@@ -105,7 +105,7 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
       !busca ||
       refDaOS(os).toLowerCase().includes(busca.toLowerCase()) ||
       String(os.numero ?? '').includes(busca) ||
-      os.unidade.toLowerCase().includes(busca.toLowerCase()) ||
+      (os.unidade || '').toLowerCase().includes(busca.toLowerCase()) ||
       (os.executor || '').toLowerCase().includes(busca.toLowerCase())
     )
   );
