@@ -66,6 +66,26 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     }
   }, [editando]);
 
+  // RASCUNHO AUTOMÁTICO (Renan 09/07: celular do campo trava e perde a
+  // digitação — caso do encarregado que prefere papel): cada tecla fica
+  // guardada NO APARELHO; travou/fechou, ao reabrir aparece o botão
+  // "Recuperar". Some sozinho ao salvar com sucesso ou descartar.
+  const chaveRascunho = editando?.id ? `fpv_rascunho_${editando.id}` : 'fpv_rascunho_novo';
+  const [rascunho, setRascunho] = useState<OSCampo | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(chaveRascunho);
+      if (!raw) { setRascunho(null); return; }
+      const d = JSON.parse(raw);
+      const temConteudo = d && d.os && (d.os.unidade || d.os.solicitado || d.os.servico || d.os.materiais || d.os.memoria_calculo);
+      if (temConteudo && d.t && Date.now() - d.t < 24 * 3600 * 1000) setRascunho(d.os);
+      else { localStorage.removeItem(chaveRascunho); setRascunho(null); }
+    } catch { setRascunho(null); }
+  }, [chaveRascunho]);
+  useEffect(() => {
+    try { localStorage.setItem(chaveRascunho, JSON.stringify({ os, t: Date.now() })); } catch { /* sem espaço no aparelho — segue sem rascunho */ }
+  }, [os, chaveRascunho]);
+
   useEffect(() => {
     if (!VOZ_ATIVA) return; // voz desligada nesta semana — formulário é digitado
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -91,7 +111,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
   const campo = (k: keyof OSCampo, v: any) => setOs(prev => ({ ...prev, [k]: v }));
 
-  const limpar = () => { setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); aoCancelarEdicao(); };
+  const limpar = () => { try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ } setRascunho(null); setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); aoCancelarEdicao(); };
 
   const mudaKit = (descricao: string, delta: number) =>
     setKit(prev => {
@@ -199,6 +219,8 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     }
 
     setMsg((os.id ? 'O.S. atualizada ✔' : `O.S. ${ref ? ref + ' ' : ''}registrada no banco central ✔`) + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : '') + msgKit);
+    try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ }
+    setRascunho(null);
     setOs(vaziaPara(usuario));
     setFotos([]);
     setKit({});
@@ -212,6 +234,16 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
   return (
     <form onSubmit={salvar} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+      {/* recuperação do rascunho: celular travou? nada se perdeu */}
+      {rascunho && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex items-center gap-2 flex-wrap text-xs font-bold text-amber-800">
+          📝 Tem coisa digitada aqui que NÃO foi salva.
+          <button type="button" onClick={() => { setOs({ ...rascunho }); setRascunho(null); }}
+            className="bg-amber-500 text-white rounded-full px-3.5 py-1.5">↩ Recuperar</button>
+          <button type="button" onClick={() => { try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ } setRascunho(null); }}
+            className="text-amber-700 underline">descartar</button>
+        </div>
+      )}
       <div className="space-y-2">
         <h2 className="font-bold text-stone-900">{os.id ? `Editando O.S. ${refDaOS(os)}` : 'Registrar O.S. de campo'}</h2>
         {/* tipo da atividade (decisão Renan 06/07): 3 opções no lugar do
