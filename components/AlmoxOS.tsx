@@ -364,6 +364,62 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     await supabase.from('solicitacao_material').update({ status: 'SEPARADO' }).eq('id', q.id);
     carregar();
   };
+
+  // === PEDIDO → SAÍDA sem redigitar (Renan 12/07): quebra o texto do
+  // pedido em itens (quebra de linha, vírgula ou ; separam), estima
+  // quantidade/unidade e gera as saídas já vinculadas à O.S. e ao
+  // retirante. recebido=null: o RECEBI da equipe é feito no próprio
+  // pedido (não duplica confirmação). João corrige qtd depois na lista.
+  const parsePedido = (texto: string) =>
+    (texto || '').split(/[\n,;]+/).map(s => s.trim()).filter(Boolean).map(p => {
+      const m = p.match(/^(\d+(?:[.,]\d+)?)\s+(.*)$/);
+      let quantidade = 1, resto = p;
+      if (m) { quantidade = parseFloat(m[1].replace(',', '.')) || 1; resto = m[2].trim(); }
+      let unidade = 'UND';
+      const toks = resto.split(/\s+/);
+      if (toks.length > 1 && UNIDADES.some(x => norm(x) === norm(toks[0]))) { unidade = toks[0].toUpperCase(); resto = toks.slice(1).join(' '); }
+      return { descricao: resto || p, quantidade, unidade };
+    });
+
+  const gerandoRef = React.useRef(false);
+  const gerarSaidasDoPedido = async (q: Solicitacao) => {
+    if (gerandoRef.current) return;
+    const itens = parsePedido(q.itens);
+    if (itens.length === 0) { setMsg('Pedido sem itens para gerar.'); return; }
+    const refOS = (q.os_ref || '').replace(/^O\.?S\.?\s*/i, '').trim();
+    const escola = refOS ? (listaOS.find(o => refDaOS(o) === refOS || String(o.numero ?? '') === refOS)?.unidade || '') : '';
+    const dest = q.solicitante.includes('·') ? q.solicitante.split('·').pop()!.trim() : q.solicitante;
+    const previa = itens.map(i => `• ${i.quantidade} ${i.unidade} ${i.descricao}`).join('\n');
+    if (!confirm(`Gerar ${itens.length} saída(s) deste pedido de ${q.solicitante}?\n\n${previa}\n\nDá baixa no estoque e vincula à O.S. ${refOS || '(sem O.S.)'}. Ajuste as quantidades depois na aba Saída.`)) return;
+    gerandoRef.current = true; setSalvando(true); setMsg('');
+    const linhas = itens.map(i => ({
+      data: hoje(), descricao: i.descricao, quantidade: i.quantidade, unidade: i.unidade,
+      os_ref: refOS || null, escola, origem: 'ALMOXARIFADO',
+      obs: `Pedido #${q.id} · ${q.solicitante}`, destinatario: dest, recebido: null,
+    }));
+    let { error } = await supabase.from('saida_material').insert(linhas);
+    if (error && /obs|destinatario|recebido/i.test(error.message)) {
+      const semNovas = linhas.map(l => ({
+        data: l.data, descricao: l.descricao, quantidade: l.quantidade,
+        unidade: l.unidade, os_ref: l.os_ref, escola: l.escola, origem: l.origem,
+      }));
+      ({ error } = await supabase.from('saida_material').insert(semNovas));
+    }
+    if (!error) await supabase.from('solicitacao_material').update({ status: 'SEPARADO' }).eq('id', q.id);
+    gerandoRef.current = false; setSalvando(false);
+    if (error) { setMsg('Erro ao gerar saídas: ' + error.message); return; }
+    setMsg(`✅ ${itens.length} saída(s) geradas do pedido de ${q.solicitante}${refOS ? ' → O.S. ' + refOS : ''}. Pedido marcado como SEPARADO.`);
+    carregar();
+  };
+
+  // ver/corrigir o texto completo do pedido (textos longos que truncavam)
+  const editarPedido = async (q: Solicitacao) => {
+    const novo = prompt('Itens do pedido (um por linha; João pode corrigir):', q.itens);
+    if (novo == null || novo.trim() === q.itens) return;
+    const { error } = await supabase.from('solicitacao_material').update({ itens: novo.trim() }).eq('id', q.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg('✏️ Pedido atualizado.'); carregar();
+  };
   // auto-resposta do spec: cada linha do pedido casada contra o estoque
   const checaLinha = (linha: string): { ok: boolean | null; txt: string } => {
     const l = norm(linha);
@@ -798,17 +854,20 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
               <div key={q.id} className={`border rounded-xl p-3 ${q.status === 'PEDIDO' ? 'border-red-200 bg-red-50/40' : q.status === 'SEPARADO' ? 'border-amber-200 bg-amber-50/40' : 'border-stone-100'}`}>
                 <div className="flex items-center gap-2 mb-1.5">
                   <b className="text-sm text-stone-900">{q.solicitante}</b>
-                  {q.os_ref && <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5">O.S. {q.os_ref}</span>}
+                  {q.os_ref && <span className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5">O.S. {(q.os_ref || '').replace(/^O\.?S\.?\s*/i, '')}</span>}
                   <span className="text-[11px] text-stone-400 flex-1">{q.data?.split('-').reverse().slice(0, 2).join('/')}</span>
+                  <button onClick={() => editarPedido(q)} title="Corrigir os itens do pedido" className="p-1 text-stone-300 hover:text-fpv-600"><Pencil size={13} /></button>
                   <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${q.status === 'PEDIDO' ? 'bg-red-600 text-white' : q.status === 'SEPARADO' ? 'bg-amber-500 text-white' : 'bg-fpv-600 text-white'}`}>{q.status}</span>
                 </div>
+                {/* itens completos (texto longo NÃO trunca mais — Renan 12/07);
+                    quebra por linha, vírgula ou ; casa com a geração de saída */}
                 <div className="space-y-0.5">
-                  {q.itens.split('\n').filter(l => l.trim()).map((l, i) => {
+                  {q.itens.split(/[\n,;]+/).map(l => l.trim()).filter(Boolean).map((l, i) => {
                     const c = checaLinha(l);
                     return (
-                      <div key={i} className="flex items-center gap-2 text-sm">
-                        <span className="flex-1 min-w-0 truncate text-stone-700">{l}</span>
-                        <span className={`text-[10px] font-bold ${c.ok === true ? 'text-fpv-700' : c.ok === false ? 'text-red-600' : 'text-stone-400'}`}>
+                      <div key={i} className="flex items-start gap-2 text-sm">
+                        <span className="flex-1 min-w-0 break-words text-stone-700">{l}</span>
+                        <span className={`text-[10px] font-bold shrink-0 ${c.ok === true ? 'text-fpv-700' : c.ok === false ? 'text-red-600' : 'text-stone-400'}`}>
                           {c.ok === true ? '✔ ' : c.ok === false ? '✗ ' : '? '}{c.txt}
                         </span>
                       </div>
@@ -816,9 +875,15 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                   })}
                 </div>
                 {q.status === 'PEDIDO' && (
-                  <button onClick={() => marcarSeparado(q)} className="mt-2 w-full text-xs font-bold text-white bg-fpv-600 hover:bg-fpv-700 rounded-lg py-2">
-                    ✔ Material separado (avisa a equipe)
-                  </button>
+                  <div className="mt-2 space-y-1.5">
+                    <button onClick={() => gerarSaidasDoPedido(q)} disabled={salvando}
+                      className="w-full text-xs font-black text-white bg-fpv-600 hover:bg-fpv-700 disabled:bg-stone-300 rounded-lg py-2.5 flex items-center justify-center gap-1.5">
+                      <PackageMinus size={14} /> Gerar saídas deste pedido (dá baixa + vincula O.S.)
+                    </button>
+                    <button onClick={() => marcarSeparado(q)} className="w-full text-[11px] font-bold text-stone-500 underline py-1">
+                      só marcar separado (material entregue por fora)
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
