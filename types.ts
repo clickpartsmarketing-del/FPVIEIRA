@@ -46,4 +46,7 @@ export const CLASSIF_OPTIONS = ['Emergencial', 'Urgente', 'Normal'];
 export const EXECUTOR_OPTIONS = ['Gilson', 'Leandro', 'Carlos Alberto', 'Renato', 'Patrick', 'Edison', 'Emiliano', 'Matheus', 'Geilton', 'Nicolas', 'Serviço Externo'];
 // só a medição vigente por decisão do Renan (05/07) — valores antigos
 // (MED 7 etc.) continuam visíveis ao editar O.S. que já os têm
-export const MED_OPTIONS = ['', 'MED 8'];
+// medições futuras abertas p/ despacho (Renan 21/07: O.S. recusada pelo
+// fiscal migra p/ a medição seguinte na hora). Históricas aparecem no
+// select por append quando a O.S. já as carrega.
+export const MED_OPTIONS = ['', 'MED 8', 'MED 9', 'MED 10', 'MED 11', 'MED 12', 'MED 13'];

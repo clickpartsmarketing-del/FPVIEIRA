@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
-import { OSCampo, refDaOS } from '../types';
+import { OSCampo, refDaOS, MED_OPTIONS } from '../types';
 import { medDoMes, hojeLocal, DESIGNADOS } from '../config';
 import { osService } from '../services/osService';
 import { supabase } from '../services/supabaseClient';
@@ -74,6 +74,18 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     await osService.salvar({ ...os, executor: pd.exec, prioridade: pd.p });
     setEnviandoId(null);
     setPend(prev => { const n = { ...prev }; delete n[os.id ?? -1]; return n; });
+    aoMudar();
+  };
+
+  // TROCA DE MEDIÇÃO EM 1 TOQUE (v65, Renan 21/07: mutirão dos ~400 papéis
+  // da MED 8 — e O.S. recusada pelo fiscal migra p/ a medição seguinte
+  // sem abrir o formulário). Só gestão vê o seletor.
+  const [mudandoMedId, setMudandoMedId] = useState<number | null>(null);
+  const mudarMedicao = async (os: OSCampo, med: string) => {
+    if (med === (os.medicao || '')) return;
+    setMudandoMedId(os.id ?? null);
+    await osService.salvar({ ...os, medicao: med });
+    setMudandoMedId(null);
     aoMudar();
   };
 
@@ -405,6 +417,15 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                         })()}
                       </>
                     )}
+                    <span className="text-stone-200">·</span>
+                    <select value={os.medicao || ''} disabled={mudandoMedId === os.id}
+                      onChange={e => mudarMedicao(os, e.target.value)}
+                      title="Mover esta O.S. de medição"
+                      className={`text-[11px] font-bold border rounded-full px-2 py-0.5 outline-none ${os.medicao ? 'bg-fpv-50 text-fpv-700 border-fpv-200' : 'bg-white text-stone-400 border-stone-200'}`}>
+                      <option value="">MED —</option>
+                      {(os.medicao && !MED_OPTIONS.includes(os.medicao) ? [...MED_OPTIONS.filter(m => m), os.medicao] : MED_OPTIONS.filter(m => m))
+                        .map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
                   </div>
                 );
               })()}

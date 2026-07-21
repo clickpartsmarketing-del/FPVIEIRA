@@ -36,7 +36,7 @@ interface Solicitacao {
   itens: string; status: string; criado_em?: string;
 }
 
-const CATEGORIAS = ['ELÉTRICA', 'HIDRÁULICA', 'ESGOTO', 'CIVIL', 'PINTURA', 'FERRAMENTAS', 'DIVERSOS'];
+const CATEGORIAS = ['ELÉTRICA', 'HIDRÁULICA', 'ESGOTO', 'CIVIL', 'PINTURA', 'FERRAMENTAS', 'EPI', 'DIVERSOS'];
 const hoje = () => hojeLocal();
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
