@@ -444,12 +444,30 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     if (error) { setMsg('Erro: ' + error.message); return; }
     setMsg(`↩ +${q} ${s.unidade} ${s.descricao} de volta ao saldo.`); carregar();
   };
-  const editarQt = async (s: Saida) => {
-    const resp = prompt(`Corrigir a quantidade de "${s.descricao}" (atual: ${s.quantidade} ${s.unidade}):`, String(s.quantidade));
-    if (resp == null) return;
-    const q = parseFloat(resp.replace(',', '.'));
-    if (isNaN(q) || q === 0) { setMsg('Quantidade inválida.'); return; }
-    await supabase.from('saida_material').update({ quantidade: q }).eq('id', s.id); carregar();
+  // LÁPIS COMPLETO DA SAÍDA (Renan 21/07): o João corrige erro de
+  // lançamento — MATERIAL, Nº DA O.S. e DATA (além da quantidade).
+  // Enter mantém o valor atual; O.S. vazia desvincula.
+  const editarSaida = async (s: Saida) => {
+    const desc = prompt('MATERIAL (Enter mantém):', s.descricao); if (desc == null) return;
+    const refN = prompt('Nº da O.S. vinculada (Enter mantém · apagar tudo desvincula):', s.os_ref || ''); if (refN == null) return;
+    const dataN = prompt('DATA da saída (dd/mm/aaaa · Enter mantém):', (s.data || '').split('-').reverse().join('/')); if (dataN == null) return;
+    const qtN = prompt(`QUANTIDADE em ${s.unidade} (Enter mantém):`, String(s.quantidade)); if (qtN == null) return;
+    const upd: any = {};
+    if (desc.trim() && desc.trim() !== s.descricao) upd.descricao = desc.trim().toUpperCase();
+    const r = refN.trim().replace(/^O\.?S\.?\s*/i, '');
+    if (r !== ((s.os_ref || '').trim())) upd.os_ref = (r || null);
+    const dTxt = dataN.trim();
+    let dISO = '';
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dTxt)) { const p = dTxt.split('/'); dISO = `${p[2]}-${p[1]}-${p[0]}`; }
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(dTxt)) { dISO = dTxt; }
+    if (dISO && dISO !== s.data) upd.data = dISO;
+    const q = parseFloat(qtN.replace(',', '.'));
+    if (!isNaN(q) && q > 0 && q !== s.quantidade) upd.quantidade = q;
+    if (Object.keys(upd).length === 0) { setMsg('Nada alterado.'); return; }
+    const { error } = await supabase.from('saida_material').update(upd).eq('id', s.id);
+    if (error) { setMsg('Erro ao corrigir: ' + error.message); return; }
+    setMsg('✏️ Saída corrigida' + (upd.os_ref !== undefined ? ` · O.S. ${upd.os_ref ?? '(desvinculada)'}` : '') + '.');
+    carregar();
   };
   const confirmarRecebidoManual = async (s: Saida) => {
     await supabase.from('saida_material').update({ recebido: true }).eq('id', s.id); carregar();
@@ -511,7 +529,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                     className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><CheckCircle2 size={14} /></button>
                 )}
                 {!dev && <button onClick={() => devolver(s)} title="Devolução" className="p-1 text-stone-300 hover:text-amber-600 shrink-0"><Undo2 size={14} /></button>}
-                <button onClick={() => editarQt(s)} title="Corrigir quantidade" className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={14} /></button>
+                <button onClick={() => editarSaida(s)} title="Corrigir lançamento (material / nº O.S. / data / qtd)" className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={14} /></button>
                 <button onClick={() => excluirSaida(s)} className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
               </>
             )}
