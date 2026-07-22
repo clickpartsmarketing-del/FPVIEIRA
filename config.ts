@@ -58,6 +58,7 @@ export const ACESSOS: Acesso[] = [
   { rotulo: 'Lucas', email: 'lucas@fpv.app', dica: 'gestor geral', emoji: '📊', grupo: 'gestao' },
   { rotulo: 'Rafael', email: 'rafael@fpv.app', dica: 'gestão', emoji: '📊', grupo: 'gestao' },
   { rotulo: 'Edmar', email: 'edmar@fpv.app', dica: 'medição', emoji: '📐', grupo: 'gestao' },
+  { rotulo: 'Brendah', email: 'brendah@fpv.app', dica: 'cadastros · esteira', emoji: '📋', grupo: 'gestao' },
 ];
 
 // DESIGNAÇÃO EM 1 TOQUE (pedido Renan 07/07): a gestão escolhe quem toca
