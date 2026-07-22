@@ -314,35 +314,57 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     await supabase.from('ferramenta').update({ status: 'ESTOQUE', com_quem: null, obra: null, desde: null, obs: null }).eq('id', f.id);
     carregar();
   };
-  // João consulta E corrige o vínculo depois da entrega (pedido Renan
-  // 06/07: "precisa acessar os dados de onde foi parar")
-  const editarVinculoFerr = async (f: Ferramenta) => {
-    const quem = prompt('Com quem está?', f.com_quem || ''); if (quem == null) return;
-    const obra = prompt('Em qual obra/escola?', f.obra || ''); if (obra == null) return;
-    const osAtual = (f.obs || '').replace(/^O\.S\.\s*/i, '').trim();
-    const osRef = (prompt('O.S. vinculada (vazio = sem vínculo):', osAtual) ?? osAtual).trim();
-    const { error } = await supabase.from('ferramenta').update({
-      com_quem: quem.trim() || f.com_quem,
-      obra: obra.trim() || null,
-      obs: osRef ? `O.S. ${osRef}` : null
-    }).eq('id', f.id);
+  // Lápis COMPLETO da ferramenta (pedido Renan 22/07): João corrige
+  // modelo/descrição e quantidade em qualquer situação; se estiver EM
+  // CAMPO, segue para com quem / obra / O.S. — Enter mantém o atual
+  const editarFerr = async (f: Ferramenta) => {
+    const desc = prompt('Ferramenta (modelo/descrição):', f.descricao); if (desc == null || !desc.trim()) return;
+    const qS = prompt('Quantidade:', String(f.quantidade)); if (qS == null) return;
+    const q = parseFloat(qS.replace(',', '.'));
+    const payload: any = { descricao: desc.trim(), quantidade: isNaN(q) || q <= 0 ? f.quantidade : q };
+    if (f.status === 'EM CAMPO') {
+      const quem = prompt('Com quem está?', f.com_quem || ''); if (quem == null) return;
+      const obra = prompt('Em qual obra/escola?', f.obra || ''); if (obra == null) return;
+      const osAtual = (f.obs || '').replace(/^O\.S\.\s*/i, '').trim();
+      const osRef = (prompt('O.S. vinculada (vazio = sem vínculo):', osAtual) ?? osAtual).trim();
+      payload.com_quem = quem.trim() || f.com_quem;
+      payload.obra = obra.trim() || null;
+      payload.obs = osRef ? `O.S. ${osRef}` : null;
+    }
+    const { error } = await supabase.from('ferramenta').update(payload).eq('id', f.id);
     if (error) { setMsg('Erro: ' + error.message); return; }
-    setMsg(`✏️ ${f.descricao}: vínculo atualizado.`); carregar();
+    setMsg(`✏️ ${desc.trim()} atualizado.`); carregar();
+  };
+  // apagar cadastro errado (Renan 22/07) — NÃO é devolução: devolução
+  // é o botão "← voltou". A RLS do banco já autoriza o João.
+  const excluirFerr = async (f: Ferramenta) => {
+    const alerta = f.status === 'EM CAMPO' ? `\n⚠️ Atenção: ela consta EM CAMPO com ${f.com_quem || '?'}.` : '';
+    if (!confirm(`Apagar "${f.descricao}" da lista de ferramentas?${alerta}\n(Use só se o cadastro estiver errado — devolução é o "← voltou".)`)) return;
+    const { error } = await supabase.from('ferramenta').delete().eq('id', f.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`🗑 ${f.descricao} apagada da lista de ferramentas.`); carregar();
   };
 
-  // REV 001 do gestor: João edita descrição/unidade/mínimo; a CONTAGEM
-  // (saldo inicial) só a gestão ajusta — separação de funções
+  // REV 001 do gestor + pedido Renan 22/07: João edita descrição,
+  // CATEGORIA, unidade e mínimo de qualquer item; a CONTAGEM (saldo
+  // inicial) a gestão ajusta em tudo e o João nas FERRAMENTAS e EPI
   const editarItem = async (i: ItemEstoque) => {
     const desc = prompt('Descrição do item:', i.descricao); if (desc == null || !desc.trim()) return;
+    const catS = prompt(`Categoria (${CATEGORIAS.join(' / ')}):`, i.categoria); if (catS == null) return;
+    const cat = CATEGORIAS.find(c => norm(c) === norm(catS.trim())) || i.categoria;
     const un = prompt('Unidade (UND, M, KG…):', i.unidade) || i.unidade;
     const minS = prompt('Quantidade MÍNIMA (alerta):', String(i.qtd_minima)); if (minS == null) return;
     const min = parseFloat(minS.replace(',', '.'));
     const { error } = await supabase.from('estoque_item')
-      .update({ descricao: desc.trim(), unidade: un.trim(), qtd_minima: isNaN(min) ? i.qtd_minima : min })
+      .update({ descricao: desc.trim(), categoria: cat, unidade: un.trim(), qtd_minima: isNaN(min) ? i.qtd_minima : min })
       .eq('id', i.id);
     if (error) { setMsg('Erro: ' + error.message); return; }
-    setMsg(`✏️ ${desc.trim()} atualizado.`); carregar();
+    setMsg(`✏️ ${desc.trim()} (${cat}) atualizado.`); carregar();
   };
+  // João ajusta a contagem só nas categorias dele (FERRAMENTAS/EPI);
+  // nos consumíveis a separação de funções da REV001 continua valendo
+  const podeContagemItem = (i: ItemEstoque) =>
+    podeAjustarContagem || (usuario === 'joao' && (i.categoria === 'FERRAMENTAS' || i.categoria === 'EPI'));
   // REV002: excluir item do estoque — só gestão (RLS já restringe no banco)
   const excluirItem = async (i: ItemEstoque) => {
     if (!confirm(`Excluir "${i.descricao}" do catálogo do estoque?\n(As saídas históricas dele NÃO são apagadas.)`)) return;
@@ -351,7 +373,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     setMsg(`🗑 ${i.descricao} removido do catálogo.`); carregar();
   };
   const ajustarContagem = async (i: ItemEstoque) => {
-    const s = prompt(`CONTAGEM física de "${i.descricao}" (ajuste de GESTÃO — atual: ${i.saldo_inicial}):`, String(i.saldo_inicial));
+    const s = prompt(`CONTAGEM física de "${i.descricao}" (atual: ${i.saldo_inicial}):`, String(i.saldo_inicial));
     if (s == null) return;
     const v = parseFloat(s.replace(',', '.'));
     if (isNaN(v) || v < 0) { setMsg('Valor inválido.'); return; }
@@ -788,10 +810,10 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                   <b className={`tabular-nums ${s <= 0 ? 'text-red-600' : 'text-stone-900'}`}>{s} {i.unidade}</b>
                   {i.qtd_minima > 0 && <span className="text-[10px] text-stone-400">mín {i.qtd_minima}</span>}
                   {nv && <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${nv.cls}`}>{nv.rot}</span>}
-                  <button onClick={() => editarItem(i)} title="Editar descrição/unidade/mínimo"
+                  <button onClick={() => editarItem(i)} title="Editar descrição/categoria/unidade/mínimo"
                     className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
-                  {podeAjustarContagem && (
-                    <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (Nicolas/Renan/Lucas)"
+                  {podeContagemItem(i) && (
+                    <button onClick={() => ajustarContagem(i)} title="Ajustar CONTAGEM (gestão · João em ferramentas/EPI)"
                       className="text-[10px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-2 py-0.5 shrink-0">🧮</button>
                   )}
                   <button onClick={() => excluirItem(i)} title="Excluir item do catálogo"
@@ -831,10 +853,10 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                       )}
                       <span className="text-[10px] text-stone-400"> {aberta ? '▲' : '▼'}</span>
                     </button>
-                    {f.status === 'EM CAMPO' && (
-                      <button onClick={() => editarVinculoFerr(f)} title="Editar com quem / obra / O.S."
-                        className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
-                    )}
+                    <button onClick={() => editarFerr(f)} title="Corrigir modelo/quantidade (e vínculo, se em campo)"
+                      className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
+                    <button onClick={() => excluirFerr(f)} title="Apagar cadastro errado"
+                      className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={13} /></button>
                     {f.status === 'ESTOQUE'
                       ? <button onClick={() => entregarFerr(f)} className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-3 py-1 shrink-0">entregar →</button>
                       : <button onClick={() => receberFerr(f)} className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 shrink-0">← voltou</button>}
