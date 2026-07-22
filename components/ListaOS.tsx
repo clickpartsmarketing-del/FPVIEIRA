@@ -228,10 +228,32 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     if (resp == null) return;
     const n = parseInt(resp.replace(/\D/g, ''), 10);
     if (!n) return;
-    // mesma guarda anti-duplicata do formulário (refatoração sênior 06/07)
     const existe = await osService.numeroExiste(n);
     if (existe && existe.id !== os.id) {
-      alert(`⛔ O nº ${n} JÁ EXISTE no banco (${existe.unidade} · ${existe.status}). Confira o e-mail — se for a mesma O.S., é ELA que deve ser trabalhada (ache na lista).`);
+      // REGRA NOVA (Renan 22/07, caso L20+L21→1330): nº JÁ EXISTE = o
+      // fiscal emitiu UMA oficial cobrindo esta(s) emergência(s) → FUSÃO:
+      // a oficial herda memória/fotos (append) e a fictícia vira marca
+      // "oficializada → nº". Suporta VÁRIAS fictícias na mesma oficial.
+      if (!confirm(`O nº ${n} JÁ EXISTE (${existe.unidade} · ${existe.status}).\n\nVINCULAR a ${refDaOS(os)} a ela? A oficial ${n} herda a memória e as fotos desta emergência, e a ${refDaOS(os)} vira registro "oficializada → ${n}".`)) return;
+      const { data: alvoRows } = await supabase.from('os_campo')
+        .select('id, servico, memoria_calculo, materiais, foto_urls, status, medicao, par_sugerido, executor')
+        .eq('id', existe.id).limit(1);
+      const alvo: any = alvoRows && alvoRows[0];
+      if (!alvo) { alert('Não consegui carregar a oficial. Tente pela busca.'); return; }
+      const marca = `Executado via emergência ${refDaOS(os)}${os.executor ? ` (${os.executor})` : ''}${os.conclusao ? ` em ${os.conclusao}` : ''}`;
+      const memN = (alvo.memoria_calculo || '').trim();
+      const upd: any = {
+        memoria_calculo: memN ? `${memN}\n${marca}${(os.memoria_calculo || '').trim() ? ' — ' + (os.memoria_calculo || '').trim() : ''}` : `${marca}${(os.memoria_calculo || '').trim() ? ' — ' + (os.memoria_calculo || '').trim() : ''}`,
+        foto_urls: Array.from(new Set([...(alvo.foto_urls || []), ...(os.foto_urls || [])])),
+        par_sugerido: alvo.par_sugerido ? `${alvo.par_sugerido}+${refDaOS(os)}` : refDaOS(os),
+        oficializada_em: new Date().toISOString(),
+      };
+      if (!(alvo.executor || '').trim() && (os.executor || '').trim()) upd.executor = os.executor;
+      if ((os.materiais || '').trim()) upd.materiais = [(alvo.materiais || '').trim(), (os.materiais || '').trim()].filter(Boolean).join('\n');
+      if (alvo.status === 'Pendente' && os.status === 'Concluído') { upd.status = 'Concluído'; if (os.conclusao) upd.conclusao = os.conclusao; }
+      await supabase.from('os_campo').update(upd).eq('id', alvo.id);
+      await supabase.from('os_campo').update({ excluida: true, status: 'Cancelada', par_sugerido: String(n) }).eq('id', os.id);
+      aoMudar();
       return;
     }
     await osService.salvar({ ...os, numero: n });

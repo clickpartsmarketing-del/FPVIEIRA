@@ -412,6 +412,22 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     carregar();
   };
 
+  // SERVIÇO REALIZADO pela saída (Renan 22/07): o João auxilia o
+  // operacional preenchendo o "serviço executado" da O.S. vinculada
+  // sem sair do almoxarifado. Pré-carrega o texto atual da O.S.
+  const preencherServico = async (s: Saida) => {
+    const ref = ((s.os_ref || '').trim()).replace(/^O\.?S\.?\s*/i, '');
+    if (!ref) { setMsg('Esta saída não tem O.S. vinculada — use o lápis para vincular primeiro.'); return; }
+    const alvo = listaOS.find(o => refDaOS(o) === ref || String(o.numero ?? '') === ref);
+    if (!alvo || !alvo.id) { setMsg(`Não achei a O.S. ${ref} na lista — confira o número.`); return; }
+    const atual = (alvo.servico || '').trim();
+    const novo = prompt(`SERVIÇO REALIZADO na O.S. ${ref} — ${alvo.unidade}\n(texto atual pré-carregado; edite/complete e OK):`, atual);
+    if (novo == null || novo.trim() === atual) return;
+    const { error } = await supabase.from('os_campo').update({ servico: novo.trim() }).eq('id', alvo.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`📝 Serviço realizado gravado na O.S. ${ref}.`);
+  };
+
   // ver/corrigir o texto completo do pedido (textos longos que truncavam)
   const editarPedido = async (q: Solicitacao) => {
     const novo = prompt('Itens do pedido (um por linha; João pode corrigir):', q.itens);
@@ -530,6 +546,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                 )}
                 {!dev && <button onClick={() => devolver(s)} title="Devolução" className="p-1 text-stone-300 hover:text-amber-600 shrink-0"><Undo2 size={14} /></button>}
                 <button onClick={() => editarSaida(s)} title="Corrigir lançamento (material / nº O.S. / data / qtd)" className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={14} /></button>
+                {(s.os_ref || '').trim() !== '' && (
+                  <button onClick={() => preencherServico(s)} title="Preencher o SERVIÇO REALIZADO na O.S. vinculada" className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><CheckCircle2 size={14} /></button>
+                )}
                 <button onClick={() => excluirSaida(s)} className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
               </>
             )}
