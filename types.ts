@@ -34,6 +34,16 @@ export const refDaOS = (o: Pick<OSCampo, 'numero' | 'fict_ref' | 'numero_fict'>)
   o.numero != null ? String(o.numero)
     : (o.fict_ref || (o.numero_fict ? `F-${o.numero_fict}` : 'S/Nº'));
 
+// régua única de BUSCA (v70): minúsculas, sem acento (jose acha JOSÉ,
+// marcal acha MARÇAL) e letra dobrada colapsada (fanny acha Fany).
+// Dígitos NÃO são colapsados — número é tratado à parte pelas telas.
+export const buscaNorm = (s: string): string =>
+  (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/([a-z])\1+/g, '$1');
+
 export const TIPO_OPTIONS = ['Emergencial', 'Corretiva', 'Preventiva'];
 // 'Avaliando' entrou pelo RV000 do engenheiro (funil: pendente →
 // executando → assinatura → avaliando → concluída)

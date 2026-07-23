@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
-import { OSCampo, refDaOS, MED_OPTIONS } from '../types';
+import { OSCampo, refDaOS, MED_OPTIONS, buscaNorm } from '../types';
 import { medDoMes, hojeLocal, DESIGNADOS } from '../config';
 import { osService } from '../services/osService';
 import { supabase } from '../services/supabaseClient';
@@ -172,15 +172,27 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   // uma. A lista padrão continua PESSOAL e o painel não muda em nada.
   const buscando = busca.trim() !== '';
   const baseBusca = buscando ? lista : base;
-  const filtradas = baseBusca.filter(os =>
-    casaFiltro(os) && (
-      !busca ||
-      refDaOS(os).toLowerCase().includes(busca.toLowerCase()) ||
-      String(os.numero ?? '').includes(busca) ||
-      (os.unidade || '').toLowerCase().includes(busca.toLowerCase()) ||
-      (os.executor || '').toLowerCase().includes(busca.toLowerCase())
-    )
-  );
+  // v70: régua nova da busca — sem acento e com letra dobrada tolerada
+  // (buscaNorm); número casa pelo INÍCIO (195 acha 195 e 1950-1959, mas
+  // não a 1195). Campos varridos continuam os mesmos: ref, nº, escola,
+  // executor — nenhuma informação foi tirada.
+  const bDig = busca.trim();
+  const soNumero = /^\d+$/.test(bDig);
+  const bN = buscaNorm(busca.trim());
+  const casaBusca = (os: OSCampo) => {
+    if (!buscando) return true;
+    if (soNumero) {
+      return os.numero != null
+        ? String(os.numero).startsWith(bDig)
+        : buscaNorm(refDaOS(os)).includes(bDig); // fictícia procurada só por dígitos (ex.: 20 acha L20)
+    }
+    return (
+      buscaNorm(refDaOS(os)).includes(bN) ||
+      buscaNorm(os.unidade || '').includes(bN) ||
+      buscaNorm(os.executor || '').includes(bN)
+    );
+  };
+  const filtradas = baseBusca.filter(os => casaFiltro(os) && casaBusca(os));
 
   const abertas = minhas.filter(os => !['Concluído', 'Cancelada'].includes(os.status));
   const semFoto = abertas.filter(os => !(os.foto_urls?.length > 0)).length;

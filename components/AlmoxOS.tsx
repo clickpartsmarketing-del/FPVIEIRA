@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PackageMinus, PackagePlus, Save, Loader2, Trash2, Link2, Undo2, Pencil, Search, TrendingUp, BarChart3, Boxes, Wrench, Inbox, Camera, CheckCircle2, Siren } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { osService } from '../services/osService';
-import { OSCampo, refDaOS, EXECUTOR_OPTIONS } from '../types';
+import { OSCampo, refDaOS, EXECUTOR_OPTIONS, buscaNorm } from '../types';
 import { MATERIAIS, UNIDADES, ORIGENS, MINIMO_PADRAO_PCT } from '../data/materiais';
 import { ESCOLAS, fiscalDaEscola } from '../data/escolas';
 import { hojeLocal } from '../config';
@@ -533,14 +533,20 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     </button>
   );
 
+  // v70: régua unica da busca (acento + letra dobrada); nº por INÍCIO
+  // igual à aba O.S. — normalizada 1x fora do filtro (celular fraco)
+  const bLN = buscaNorm(buscaLista);
+  const buscaSoNum = /^\d+$/.test(buscaLista.trim());
   const ListaSaidas = ({ limite }: { limite: number }) => (
     <div className="space-y-1.5">
       {saidas.filter(s =>
         (mesFiltro === 'TODOS' || (s.data || '').slice(0, 7) === mesFiltro) && (
           !buscaLista ||
-          s.descricao.toLowerCase().includes(buscaLista.toLowerCase()) ||
-          (s.escola || '').toLowerCase().includes(buscaLista.toLowerCase()) ||
-          (s.os_ref || '').toLowerCase().includes(buscaLista.toLowerCase())
+          buscaNorm(s.descricao).includes(bLN) ||
+          buscaNorm(s.escola || '').includes(bLN) ||
+          (buscaSoNum
+            ? (s.os_ref || '').replace(/^O\.?S\.?\s*/i, '').startsWith(buscaLista.trim())
+            : buscaNorm(s.os_ref || '').includes(bLN))
         )
       ).slice(0, limite).map(s => {
         const dev = ehDevolucao(s);
