@@ -8,20 +8,31 @@ export const osService = {
   // ninguém saber. Agora devolve { dados, erro } e o App decide o que exibir.
   async listar(): Promise<{ dados: OSCampo[]; erro: string | null }> {
     // o PostgREST corta em 1000 linhas por requisição — com a planilha
-    // importada (~1.8k O.S.) é preciso paginar até vir página incompleta
+    // importada (~1.8k O.S.) é preciso paginar até vir página incompleta.
+    // v71 (caso real da O.S. 913 "sumida"): ordenar SÓ por criado_em é
+    // instável — o importão gravou 400+ linhas com o MESMO timestamp, e
+    // sem desempate o banco devolve ordem diferente a cada página: linha
+    // repetida numa, engolida noutra. O 'id' desempata (único e imutável)
+    // e o dedupe por id blinda contra insert concorrente durante a leitura.
     const PAGINA = 1000;
     const todas: OSCampo[] = [];
+    const vistos = new Set<number>();
     for (let off = 0; off < 10000; off += PAGINA) {
       const { data, error } = await supabase
         .from('os_campo')
         .select('*')
         .order('criado_em', { ascending: false })
+        .order('id', { ascending: false })
         .range(off, off + PAGINA - 1);
       if (error) {
         console.error('Erro ao listar O.S.:', error.message);
         return { dados: todas, erro: error.message };
       }
-      todas.push(...(data as OSCampo[]));
+      for (const r of (data as OSCampo[]) || []) {
+        if (r.id != null && vistos.has(r.id)) continue;
+        if (r.id != null) vistos.add(r.id);
+        todas.push(r);
+      }
       if (!data || data.length < PAGINA) break;
     }
     return { dados: todas, erro: null };
