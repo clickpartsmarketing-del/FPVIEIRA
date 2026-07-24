@@ -40,6 +40,35 @@ const CATEGORIAS = ['ELÉTRICA', 'HIDRÁULICA', 'ESGOTO', 'CIVIL', 'PINTURA', 'F
 const hoje = () => hojeLocal();
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
+// v72: o saldo é contagem inicial + entradas − saídas. Enquanto o banco
+// tinha poucas linhas o .limit(400) pegava tudo; passando disso o saldo
+// passou a ignorar em silêncio o consumo mais antigo (auditoria 24/07:
+// 2.566 de 2.966 saídas fora da conta, 118 itens com saldo inflado).
+// Agora pagina até acabar, com o desempate por id do v71 — o importão
+// gravou centenas de linhas com o mesmo criado_em e sem isso a ordem
+// muda entre páginas (linha repetida numa, engolida noutra).
+const paginarTudo = async (tabela: string, teto = 12000) => {
+  const PAGINA = 1000;
+  const todas: any[] = [];
+  const vistos = new Set<number>();
+  for (let off = 0; off < teto; off += PAGINA) {
+    const { data, error } = await supabase
+      .from(tabela)
+      .select('*')
+      .order('criado_em', { ascending: false })
+      .order('id', { ascending: false })
+      .range(off, off + PAGINA - 1);
+    if (error) return { data: todas, error };
+    for (const r of (data as any[]) || []) {
+      if (r.id != null && vistos.has(r.id)) continue;
+      if (r.id != null) vistos.add(r.id);
+      todas.push(r);
+    }
+    if (!data || data.length < PAGINA) break;
+  }
+  return { data: todas, error: null as any };
+};
+
 const SAIDA_VAZIA: Saida = { data: hoje(), descricao: '', quantidade: 1, unidade: 'UND', os_ref: '', escola: '', origem: 'ALMOXARIFADO', obs: '', destinatario: '' };
 const ITEM_VAZIO: ItemEstoque = { descricao: '', categoria: 'DIVERSOS', unidade: 'UND', qtd_minima: 0, saldo_inicial: 0 };
 const ENTRADA_VAZIA: Entrada = { data: hoje(), descricao: '', quantidade: 1, unidade: 'UND', origem: 'COMPRA', obs: '' };
@@ -72,9 +101,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
 
   const carregar = async () => {
     const [rs, ri, re, rf, rq] = await Promise.all([
-      supabase.from('saida_material').select('*').order('criado_em', { ascending: false }).limit(400),
+      paginarTudo('saida_material'),
       supabase.from('estoque_item').select('*').order('descricao'),
-      supabase.from('entrada_material').select('*').order('criado_em', { ascending: false }).limit(200),
+      paginarTudo('entrada_material'),
       supabase.from('ferramenta').select('*').order('descricao'),
       supabase.from('solicitacao_material').select('*').order('criado_em', { ascending: false }).limit(100),
     ]);
@@ -113,6 +142,15 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   const entradasPor = somaPor(entradas);
   const saidasPor = somaPor(saidas);
   const saldoDe = (i: ItemEstoque) => Number(i.saldo_inicial || 0) + (entradasPor[norm(i.descricao)] || 0) - (saidasPor[norm(i.descricao)] || 0);
+  // v72: item SEM contagem física não tem saldo — tem histórico de consumo.
+  // 250 dos 254 itens entraram no catálogo pelo cadastro automático (saldo
+  // inicial 0), então "saldo" ali é só a soma do que já saiu, com sinal
+  // negativo. Antes isso passava despercebido porque o .limit(400) só
+  // mostrava a pontinha; com a leitura completa viraria um mar de vermelho
+  // sem significado. Enquanto a gestão não roda o 🧮, o painel diz a
+  // verdade: "sem contagem" — e o alarme só toca em item contado.
+  const temContagem = (i: ItemEstoque) => Number(i.saldo_inicial || 0) > 0;
+  const semContagem = itens.filter(i => !temContagem(i));
   // mínimo efetivo: o cadastrado no item OU a % padrão do setor sobre a
   // contagem inicial (pedido Renan/Lucas 06/07 — só painel do João)
   const minimoDe = (i: ItemEstoque): { min: number; padrao: boolean } | null => {
@@ -123,6 +161,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   };
   // alerta do spec: sinalizar a 50% e a 20% da quantidade mínima
   const nivelDe = (i: ItemEstoque) => {
+    if (!temContagem(i)) return null; // v72: sem contagem não há alarme real
     const m = minimoDe(i);
     if (!m) return null;
     const s = saldoDe(i);
@@ -133,8 +172,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     if (s <= m.min) return { rot: '🟡 no mínimo' + suf, cls: 'bg-amber-50 text-amber-700 border-amber-200' };
     return null;
   };
-  const emFalta = itens.filter(i => (i.qtd_minima > 0 || i.saldo_inicial > 0) && saldoDe(i) <= 0);
+  const emFalta = itens.filter(i => temContagem(i) && saldoDe(i) <= 0);
   const top10Acabando = itens
+    .filter(temContagem)
     .map(i => ({ i, s: saldoDe(i), m: minimoDe(i) }))
     .filter(x => x.m)
     .map(x => ({ i: x.i, s: x.s, r: x.s / x.m!.min }))
@@ -146,6 +186,19 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   const seteDias = hojeLocal(new Date(Date.now() - 7 * 86400000));
   const saidasHoje = saidas.filter(s => s.data === hojeStr && !ehDevolucao(s));
   const semOS = saidas.filter(s => !ehDevolucao(s) && !(s.os_ref || '').trim());
+  // v72: resolver a ref digitada contra o banco de O.S. — sem isso um nº
+  // inexistente ou uma fictícia velha (F-12) contava como VINCULADA e
+  // sumia do radar. Aceita o nº oficial, a ref fictícia e o fict_ref
+  // preservado depois da oficialização.
+  const achaOS = (ref: string): OSCampo | null => {
+    const r = (ref || '').trim().replace(/^O\.?S\.?\s*/i, '');
+    if (!r) return null;
+    return listaOS.find(o => refDaOS(o) === r)
+      || listaOS.find(o => (o.fict_ref || '').toUpperCase() === r.toUpperCase())
+      || null;
+  };
+  // saída que aponta para uma O.S. que não existe mais / nunca existiu
+  const refOrfa = saidas.filter(s => !ehDevolucao(s) && (s.os_ref || '').trim() && !achaOS(s.os_ref));
   const pedidosAbertos = solicitacoes.filter(q => q.status === 'PEDIDO');
   // O.S. emergenciais em aberto (spec: só emergencial, pendente/executando)
   const emergAbertas = listaOS.filter(o => o.emergencial && ['Pendente', 'Executando', 'Material'].includes(o.status));
@@ -188,6 +241,23 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     if (!dest) { setMsg('Informe QUEM RETIROU — regra do gestor: toda saída tem confirmação no login de quem levou.'); return; }
     let osRef = (saida.os_ref || '').trim();
 
+    // v72: nº digitado que NÃO existe no banco não pode virar vínculo
+    // fantasma. Até aqui gravava igual e ainda contava como "vinculada"
+    // no painel — auditoria 24/07 achou 168 saídas assim (F-12, F-57...).
+    // Nada se perde: o que ele digitou fica registrado na observação.
+    let obsExtra = '';
+    if (osRef && !achaOS(osRef)) {
+      const ok = confirm(
+        `A O.S. "${osRef}" não existe no sistema.\n\n` +
+        `Pode ser número errado, O.S. que o fiscal ainda não emitiu, ou uma emergência antiga já oficializada.\n\n` +
+        `OK = salvar SEM vínculo (fica anotado "${osRef}" na observação, p/ acertar depois)\n` +
+        `Cancelar = voltar e corrigir o número`
+      );
+      if (!ok) return;
+      obsExtra = `[O.S. digitada: ${osRef} — não encontrada no sistema]`;
+      osRef = '';
+    }
+
     // gera a O.S. EMERGENCIAL no balcão e já vincula a saída a ela
     if (gerarOS && !osRef) {
       if (!saida.escola.trim()) { setMsg('Para gerar a O.S. informe a ESCOLA.'); return; }
@@ -214,6 +284,16 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     const payload: any = { ...saida, os_ref: osRef, destinatario: dest || null };
     delete payload.id; delete payload.criado_em;
     payload.recebido = dest ? false : null;
+    // v72: com O.S. válida, a escola do material é a DA O.S. — o formulário
+    // repete a escola do lançamento anterior p/ agilizar o balcão, e isso
+    // vinha carimbando material na unidade errada (48 casos na auditoria).
+    let avisoEscola = '';
+    const osVinc = osRef ? achaOS(osRef) : null;
+    if (osVinc && (osVinc.unidade || '').trim() && norm(osVinc.unidade) !== norm(payload.escola || '')) {
+      avisoEscola = ` · escola ajustada p/ ${osVinc.unidade} (é a da O.S. ${osRef})`;
+      payload.escola = osVinc.unidade;
+    }
+    if (obsExtra) payload.obs = [(payload.obs || '').trim(), obsExtra].filter(Boolean).join(' ');
     let { error } = await supabase.from('saida_material').insert([payload]);
     // banco sem as colunas novas (ALMOX-V2.sql pendente) → salva sem elas
     if (error && /obs|destinatario|recebido/i.test(error.message)) {
@@ -257,7 +337,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       }
     }
 
-    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${osRef ? ' → O.S. ' + osRef : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}${alertaCad}${msgStatus}`);
+    setMsg(`✅ Saída: ${saida.quantidade} ${saida.unidade} ${saida.descricao}${osRef ? ' → O.S. ' + osRef : ''}${obsExtra ? ' ⚠️ SEM vínculo (nº anotado na obs)' : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}${avisoEscola}${alertaCad}${msgStatus}`);
     setGerarOS(false);
     setSaida(p => ({ ...SAIDA_VAZIA, data: p.data, escola: p.escola, os_ref: osRef, origem: p.origem }));
     carregar();
@@ -466,6 +546,8 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       return palavras.some(w => l.includes(w));
     });
     if (!achado) return { ok: null, txt: 'conferir' };
+    // v72: sem contagem o app não pode afirmar "ZERADO" — manda conferir
+    if (!temContagem(achado)) return { ok: null, txt: 'conferir (s/ contagem)' };
     return saldoDe(achado) > 0 ? { ok: true, txt: `tem (${saldoDe(achado)} ${achado.unidade})` } : { ok: false, txt: 'ZERADO' };
   };
 
@@ -522,7 +604,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   // trava da medição vigente nas saídas (REV002): fora do mês vigente = só gestão
   const mesVigente = hoje().slice(0, 7);
   const travadaSaida = (s: Saida) => !ehGestor && (s.data || '').slice(0, 7) !== mesVigente;
-  const mesesDisponiveis = Array.from(new Set(saidas.map(s => (s.data || '').slice(0, 7)).filter(Boolean))).sort().reverse();
+  const mesesDisponiveis = Array.from(new Set<string>(saidas.map(s => (s.data || '').slice(0, 7)).filter(Boolean))).sort().reverse();
 
   const inputCls = 'w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500';
   const SubBtn = ({ id, icon: Icon, rot, badge }: { id: SubAba; icon: any; rot: string; badge?: number }) => (
@@ -616,6 +698,12 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
               🚨 EM FALTA (saldo zerado/negativo): {emFalta.slice(0, 6).map(i => i.descricao).join(' · ')}{emFalta.length > 6 ? ` e mais ${emFalta.length - 6}` : ''} — repor!
             </div>
           )}
+          {/* v72: o saldo só passa a valer depois da contagem física */}
+          {semContagem.length > 0 && (
+            <div className="text-xs font-bold text-stone-600 bg-stone-100 border border-stone-200 rounded-xl px-3 py-2.5">
+              📋 {semContagem.length} {semContagem.length === 1 ? 'item ainda sem contagem física' : 'itens ainda sem contagem física'} — entraram no catálogo pela saída do balcão. Enquanto a gestão não fizer a contagem no 🧮, eles mostram o quanto já saiu, não saldo.
+            </div>
+          )}
           <div className="grid grid-cols-4 gap-2">
             <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-3 text-center">
               <div className="text-2xl font-bold text-stone-900 tabular-nums">{saidasHoje.length}</div>
@@ -624,6 +712,10 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
             <div className={`rounded-2xl border shadow-sm p-3 text-center ${semOS.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-stone-200'}`}>
               <div className={`text-2xl font-bold tabular-nums ${semOS.length > 0 ? 'text-amber-700' : 'text-stone-900'}`}>{semOS.length}</div>
               <div className={`text-[10px] font-bold uppercase ${semOS.length > 0 ? 'text-amber-600' : 'text-stone-400'}`}>sem O.S.</div>
+              {/* v72: ref que não resolve contava como vinculada e sumia do radar */}
+              {refOrfa.length > 0 && (
+                <div className="text-[9px] font-bold text-red-600 mt-0.5 leading-tight">+{refOrfa.length} c/ nº inexistente</div>
+              )}
             </div>
             <div className={`rounded-2xl border shadow-sm p-3 text-center ${pedidosAbertos.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-stone-200'}`}>
               <div className={`text-2xl font-bold tabular-nums ${pedidosAbertos.length > 0 ? 'text-red-700' : 'text-stone-900'}`}>{pedidosAbertos.length}</div>
@@ -813,7 +905,11 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                 <div key={i.id} className="flex items-center gap-2 text-sm border-b border-stone-50 py-1.5">
                   <span className="flex-1 min-w-0 truncate text-stone-700">{i.descricao}</span>
                   <span className="text-[10px] text-stone-400">{i.categoria}</span>
-                  <b className={`tabular-nums ${s <= 0 ? 'text-red-600' : 'text-stone-900'}`}>{s} {i.unidade}</b>
+                  {/* v72: sem contagem física o número não é saldo, é só o
+                      consumo acumulado — mostrar como saldo enganava */}
+                  {temContagem(i)
+                    ? <b className={`tabular-nums ${s <= 0 ? 'text-red-600' : 'text-stone-900'}`}>{s} {i.unidade}</b>
+                    : <span className="text-[10px] font-bold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5 shrink-0" title={`Nunca contado. Já saíram ${Math.abs(s)} ${i.unidade} pelo balcão — faça a contagem no 🧮 para o saldo passar a valer.`}>📋 sem contagem · saiu {Math.abs(s)}</span>}
                   {i.qtd_minima > 0 && <span className="text-[10px] text-stone-400">mín {i.qtd_minima}</span>}
                   {nv && <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${nv.cls}`}>{nv.rot}</span>}
                   <button onClick={() => editarItem(i)} title="Editar descrição/categoria/unidade/mínimo"

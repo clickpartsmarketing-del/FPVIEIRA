@@ -117,6 +117,22 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     return mapa;
   }, [lista, podePriorizar]);
 
+  // v72: quando a fictícia vira oficial, o MATERIAL tem que ir junto.
+  // Até aqui só a O.S. era atualizada: as saídas do almoxarifado seguiam
+  // apontando p/ a ref antiga (L20, F-12...), que some da lista quando a
+  // fictícia é cancelada — o material já consumido sumia do custo da O.S.
+  // que vai para a medição (auditoria 24/07: 168 saídas órfãs vivas).
+  // Também leva o pedido do balcão junto. Devolve quantas linhas migraram.
+  const rechavearMaterial = async (refAntiga: string, refNova: string) => {
+    const de = (refAntiga || '').trim();
+    const para = (refNova || '').trim();
+    if (!de || !para || de === para) return 0;
+    const { data } = await supabase.from('saida_material')
+      .update({ os_ref: para }).eq('os_ref', de).select('id');
+    await supabase.from('solicitacao_material').update({ os_ref: para }).eq('os_ref', de);
+    return (data || []).length;
+  };
+
   // confirma o par: a OFICIAL herda a evidência da fictícia; a fictícia
   // vira marca "oficializada" (número eterno preservado, razão registra)
   const oficializar = async (f: OSCampo, o: OSCampo) => {
@@ -135,6 +151,8 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     if (o.status === 'Pendente' && f.status !== 'Pendente') { upd.status = f.status; if (f.conclusao) upd.conclusao = f.conclusao; }
     await supabase.from('os_campo').update(upd).eq('id', o.id);
     await supabase.from('os_campo').update({ excluida: true, status: 'Cancelada', par_sugerido: String(o.numero) }).eq('id', f.id);
+    const migrou = await rechavearMaterial(refDaOS(f), String(o.numero));
+    if (migrou > 0) alert(`✅ Oficializada na ${o.numero}.\n\n${migrou} lançamento(s) de material do almoxarifado passaram da ${refDaOS(f)} para a ${o.numero} — o custo segue com a O.S. que vai para a medição.`);
     aoMudar();
   };
 
@@ -265,10 +283,19 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
       if (alvo.status === 'Pendente' && os.status === 'Concluído') { upd.status = 'Concluído'; if (os.conclusao) upd.conclusao = os.conclusao; }
       await supabase.from('os_campo').update(upd).eq('id', alvo.id);
       await supabase.from('os_campo').update({ excluida: true, status: 'Cancelada', par_sugerido: String(n) }).eq('id', os.id);
+      const migrouF = await rechavearMaterial(refDaOS(os), String(n));
+      if (migrouF > 0) alert(`✅ ${refDaOS(os)} vinculada à ${n}.\n\n${migrouF} lançamento(s) de material passaram para a ${n}.`);
       aoMudar();
       return;
     }
+    // caminho simples: a fictícia GANHA o número. A ref muda de F-nº para
+    // o nº (refDaOS prioriza numero), então o material lançado no F-nº
+    // também precisa ser re-chaveado — senão fica apontando p/ uma ref
+    // que nenhuma consulta do almoxarifado resolve mais.
+    const refAntes = refDaOS(os);
     await osService.salvar({ ...os, numero: n });
+    const migrouS = await rechavearMaterial(refAntes, String(n));
+    if (migrouS > 0) alert(`✅ Agora é a O.S. ${n}.\n\n${migrouS} lançamento(s) de material passaram da ${refAntes} para a ${n}.`);
     aoMudar();
   };
 
