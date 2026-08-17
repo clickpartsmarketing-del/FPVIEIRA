@@ -983,10 +983,35 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
             };
             const emCampo = ferramentas.filter(f => f.status === 'EM CAMPO');
             const noEstoque = ferramentas.filter(f => f.status !== 'EM CAMPO');
+            // PLACAR DE SALDO (pedido João 17/08): a tela listava mas não SOMAVA —
+            // "saldo não constou". Soma por UNIDADE (quantidade), não por cadastro:
+            // carrinho de mão 4x conta 4. +7 dias em campo = cobrar devolução.
+            const unid = (fs: Ferramenta[]) => fs.reduce((t, f) => t + Number(f.quantidade || 1), 0);
+            // T12:00 evita o off-by-one de fuso ao parsear data pura (padrão hojeLocal)
+            const fora7 = emCampo.filter(f => f.desde && (Date.now() - new Date(f.desde + 'T12:00:00').getTime()) / 86400000 >= 7);
             const grupos: Record<string, Ferramenta[]> = {};
             for (const f of emCampo) { const k = (f.com_quem || 'Sem responsável').trim(); (grupos[k] = grupos[k] || []).push(f); }
             return (
               <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl py-2">
+                    <div className="text-lg font-bold text-stone-800">{unid(ferramentas)}</div>
+                    <div className="text-[10px] text-stone-500 font-medium">UNIDADES NO TOTAL</div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl py-2">
+                    <div className="text-lg font-bold text-amber-800">{unid(emCampo)}</div>
+                    <div className="text-[10px] text-amber-700 font-medium">EM CAMPO</div>
+                  </div>
+                  <div className="bg-fpv-50 border border-fpv-100 rounded-xl py-2">
+                    <div className="text-lg font-bold text-fpv-700">{unid(noEstoque)}</div>
+                    <div className="text-[10px] text-fpv-700 font-medium">NO ESTOQUE</div>
+                  </div>
+                </div>
+                {fora7.length > 0 && (
+                  <p className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+                    ⏰ {fora7.length} ferramenta(s) em campo há 7+ dias — cobrar devolução
+                  </p>
+                )}
                 {Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0])).map(([quem, fs]) => (
                   <div key={quem}>
                     <div className="text-xs font-bold text-amber-800 mb-1.5">🧰 {quem} <span className="font-medium text-amber-600">({fs.reduce((t, f) => t + Number(f.quantidade || 1), 0)} item(ns) em campo)</span></div>
@@ -995,7 +1020,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                 ))}
                 {noEstoque.length > 0 && (
                   <div>
-                    <div className="text-xs font-bold text-stone-500 mb-1.5">📦 No estoque ({noEstoque.length})</div>
+                    <div className="text-xs font-bold text-stone-500 mb-1.5">📦 No estoque ({unid(noEstoque)} unid · {noEstoque.length} cadastros)</div>
                     <div className="space-y-1.5">{noEstoque.map(linha)}</div>
                   </div>
                 )}
