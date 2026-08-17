@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { PackageMinus, PackagePlus, Save, Loader2, Trash2, Link2, Undo2, Pencil, Search, TrendingUp, BarChart3, Boxes, Wrench, Inbox, Camera, CheckCircle2, Siren } from 'lucide-react';
+import { PackageMinus, PackagePlus, Save, Loader2, Trash2, Link2, Undo2, Pencil, Search, TrendingUp, BarChart3, Boxes, Wrench, Inbox, Camera, CheckCircle2, Siren, Construction } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { osService } from '../services/osService';
 import { OSCampo, refDaOS, EXECUTOR_OPTIONS, buscaNorm } from '../types';
@@ -34,6 +34,16 @@ interface Ferramenta {
 interface Solicitacao {
   id?: number; data: string; solicitante: string; os_ref?: string | null;
   itens: string; status: string; criado_em?: string;
+}
+// ANDAIME (v76, pedido Renan 17/08): patrimônio PRÓPRIO, fora do contrato —
+// NÃO entra em saida_material (que alimenta a medição/EMOP). Catálogo de
+// peças + movimentos com retorno: disponível = total − movimentos abertos.
+interface AndaimeItem {
+  id?: number; descricao: string; quantidade_total: number; obs?: string | null;
+}
+interface AndaimeMov {
+  id?: number; item_id: number; quantidade: number; obra?: string | null;
+  com_quem?: string | null; os_ref?: string | null; saida: string; volta?: string | null;
 }
 
 const CATEGORIAS = ['ELÉTRICA', 'HIDRÁULICA', 'ESGOTO', 'CIVIL', 'PINTURA', 'FERRAMENTAS', 'EPI', 'DIVERSOS'];
@@ -73,7 +83,7 @@ const SAIDA_VAZIA: Saida = { data: hoje(), descricao: '', quantidade: 1, unidade
 const ITEM_VAZIO: ItemEstoque = { descricao: '', categoria: 'DIVERSOS', unidade: 'UND', qtd_minima: 0, saldo_inicial: 0 };
 const ENTRADA_VAZIA: Entrada = { data: hoje(), descricao: '', quantidade: 1, unidade: 'UND', origem: 'COMPRA', obs: '' };
 
-type SubAba = 'stats' | 'saida' | 'cadastro' | 'estoque' | 'ferramentas' | 'solicitacoes';
+type SubAba = 'stats' | 'saida' | 'cadastro' | 'estoque' | 'ferramentas' | 'andaime' | 'solicitacoes';
 
 const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: string }> = ({ listaOS, ehGestor = false, usuario = '' }) => {
   const [sub, setSub] = useState<SubAba>('stats');
@@ -87,6 +97,11 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   const [entrada, setEntrada] = useState<Entrada>({ ...ENTRADA_VAZIA });
   const [nfFoto, setNfFoto] = useState<File | null>(null);
   const [novaFerr, setNovaFerr] = useState({ descricao: '', quantidade: 1 });
+  const [andItens, setAndItens] = useState<AndaimeItem[]>([]);
+  const [andMovs, setAndMovs] = useState<AndaimeMov[]>([]); // só os em aberto (volta null)
+  const [novoAnd, setNovoAnd] = useState({ descricao: '', quantidade: 1 });
+  const [andAberto, setAndAberto] = useState<number | null>(null);
+  const [faltaAndaime, setFaltaAndaime] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState('');
   const [buscaLista, setBuscaLista] = useState('');
@@ -116,6 +131,14 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     if (!rf.error && rf.data) setFerramentas(rf.data as Ferramenta[]);
     if (!rq.error && rq.data) setSolicitacoes(rq.data as Solicitacao[]);
     setFaltaSQL(!!ri.error && /estoque_item/.test(ri.error.message));
+    // andaime é módulo novo: sem o ANDAIME.sql a aba avisa em vez de quebrar
+    const [ra1, ra2] = await Promise.all([
+      supabase.from('andaime_item').select('*').order('descricao'),
+      supabase.from('andaime_movimento').select('*').is('volta', null).order('saida'),
+    ]);
+    if (!ra1.error && ra1.data) setAndItens(ra1.data as AndaimeItem[]);
+    if (!ra2.error && ra2.data) setAndMovs(ra2.data as AndaimeMov[]);
+    setFaltaAndaime(!!ra1.error && /andaime/.test(ra1.error.message));
   };
   useEffect(() => { carregar(); }, []);
 
@@ -125,7 +148,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     let t: any;
     const bump = () => { clearTimeout(t); t = setTimeout(carregar, 1200); };
     const ch = supabase.channel('rt-almox');
-    for (const tb of ['saida_material', 'solicitacao_material', 'estoque_item', 'entrada_material', 'ferramenta']) {
+    for (const tb of ['saida_material', 'solicitacao_material', 'estoque_item', 'entrada_material', 'ferramenta', 'andaime_item', 'andaime_movimento']) {
       ch.on('postgres_changes', { event: '*', schema: 'public', table: tb }, bump);
     }
     ch.subscribe();
@@ -425,6 +448,50 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     setMsg(`🗑 ${f.descricao} apagada da lista de ferramentas.`); carregar();
   };
 
+  // ===== ANDAIME (patrimônio fora do contrato — v76) =====
+  const disponivelAnd = (i: AndaimeItem) =>
+    Number(i.quantidade_total || 0) - andMovs.filter(m => m.item_id === i.id).reduce((t, m) => t + Number(m.quantidade || 0), 0);
+  const criarAndaime = async () => {
+    if (!novoAnd.descricao.trim()) { setMsg('Informe a peça de andaime.'); return; }
+    const { error } = await supabase.from('andaime_item').insert([{ descricao: novoAnd.descricao.trim().toUpperCase(), quantidade_total: novoAnd.quantidade }]);
+    if (error) { setMsg(/andaime/.test(error.message) ? '⚠️ Rode o ANDAIME.sql primeiro (SQL Editor).' : 'Erro: ' + error.message); return; }
+    setNovoAnd({ descricao: '', quantidade: 1 }); setMsg('✅ Peça de andaime cadastrada.'); carregar();
+  };
+  // envio PARCIAL por natureza: andaime sai em lote (12 painéis p/ uma escola)
+  const enviarAndaime = async (i: AndaimeItem) => {
+    const disp = disponivelAnd(i);
+    if (disp <= 0) { setMsg(`Sem saldo no pátio de ${i.descricao}.`); return; }
+    const qtd = parseFloat(prompt(`Quantas unidades de "${i.descricao}"? (no pátio: ${disp})`, String(disp)) || '');
+    if (!qtd || qtd <= 0) return;
+    if (qtd > disp) { setMsg(`Só há ${disp} no pátio de ${i.descricao}.`); return; }
+    const obra = prompt('Para qual obra/escola?'); if (obra == null || !obra.trim()) return;
+    const quem = prompt('Com quem (responsável)?') || '';
+    const { error } = await supabase.from('andaime_movimento').insert([{ item_id: i.id, quantidade: qtd, obra: obra.trim(), com_quem: quem.trim() || null, saida: hoje() }]);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`🏗 ${qtd}× ${i.descricao} → ${obra.trim()}.`); carregar();
+  };
+  const voltouAndaime = async (m: AndaimeMov, i: AndaimeItem) => {
+    if (!confirm(`Confirmar retorno de ${m.quantidade}× ${i.descricao} de ${m.obra || '?'}?`)) return;
+    const { error } = await supabase.from('andaime_movimento').update({ volta: hoje() }).eq('id', m.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`↩️ ${m.quantidade}× ${i.descricao} de volta ao pátio.`); carregar();
+  };
+  const editarAndaime = async (i: AndaimeItem) => {
+    const desc = prompt('Peça (descrição):', i.descricao); if (desc == null || !desc.trim()) return;
+    const qt = parseFloat(prompt('Quantidade TOTAL (patrimônio):', String(i.quantidade_total)) || '');
+    if (!qt || qt <= 0) return;
+    const { error } = await supabase.from('andaime_item').update({ descricao: desc.trim().toUpperCase(), quantidade_total: qt }).eq('id', i.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`✏️ ${desc.trim()} atualizado.`); carregar();
+  };
+  const excluirAndaime = async (i: AndaimeItem) => {
+    const fora = andMovs.filter(m => m.item_id === i.id).length;
+    if (!confirm(`Apagar "${i.descricao}" do andaime?${fora ? `\n⚠️ Há ${fora} movimento(s) em aberto — somem junto.` : ''}\n(Use só p/ cadastro errado — retorno é o "← voltou".)`)) return;
+    const { error } = await supabase.from('andaime_item').delete().eq('id', i.id);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`🗑 ${i.descricao} apagado do andaime.`); carregar();
+  };
+
   // REV 001 do gestor + pedido Renan 22/07: João edita descrição,
   // CATEGORIA, unidade e mínimo de qualquer item; a CONTAGEM (saldo
   // inicial) a gestão ajusta em tudo e o João nas FERRAMENTAS e EPI
@@ -676,6 +743,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
         <SubBtn id="cadastro" icon={PackagePlus} rot="Cadastro" />
         <SubBtn id="estoque" icon={Boxes} rot="Estoque" />
         <SubBtn id="ferramentas" icon={Wrench} rot="Ferramentas" />
+        <SubBtn id="andaime" icon={Construction} rot="Andaime" />
         <SubBtn id="solicitacoes" icon={Inbox} rot="Pedidos" badge={pedidosAbertos.length} />
       </div>
 
@@ -1056,6 +1124,57 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* ============ ANDAIME (patrimônio fora do contrato) ============ */}
+      {sub === 'andaime' && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+          <h2 className="font-bold text-stone-900 text-sm">Andaime — patrimônio próprio <span className="text-stone-400 font-medium">(fora do contrato, não entra na medição)</span></h2>
+          {faltaAndaime && (
+            <p className="text-[12px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              ⚠️ Módulo novo: peça ao Renan/Nicolas para rodar o <b>ANDAIME.sql</b> no SQL Editor do Supabase — a aba liga sozinha depois.
+            </p>
+          )}
+          <div className="flex gap-2">
+            <input value={novoAnd.descricao} onChange={e => setNovoAnd(p => ({ ...p, descricao: e.target.value }))} placeholder="ex.: PAINEL 1,00 X 1,00" className={inputCls} />
+            <input type="number" min="1" value={novoAnd.quantidade} onChange={e => setNovoAnd(p => ({ ...p, quantidade: parseFloat(e.target.value) || 1 }))} className="w-20 border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
+            <button onClick={criarAndaime} className="bg-fpv-500 hover:bg-fpv-600 text-white font-bold px-4 rounded-xl text-sm">＋</button>
+          </div>
+          {!faltaAndaime && andItens.length === 0 && <p className="text-sm text-stone-400 text-center py-4">Nenhuma peça cadastrada — comece pelo ＋ (descrição + quantidade total).</p>}
+          <div className="space-y-1.5">
+            {andItens.map(i => {
+              const movs = andMovs.filter(m => m.item_id === i.id);
+              const fora = movs.reduce((t, m) => t + Number(m.quantidade || 0), 0);
+              const disp = Number(i.quantidade_total || 0) - fora;
+              const aberta = andAberto === i.id;
+              return (
+                <div key={i.id} className={`border rounded-xl px-3 py-2 text-sm ${fora > 0 ? 'border-amber-200 bg-amber-50/50' : 'border-stone-100'}`}>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setAndAberto(aberta ? null : (i.id ?? null))} className="flex-1 min-w-0 text-left truncate">
+                      <b>{i.descricao}</b>
+                      <span className={`text-[11px] font-bold ${disp === 0 ? 'text-amber-700' : 'text-fpv-700'}`}> · {disp}/{i.quantidade_total} no pátio{fora > 0 ? ` · ${fora} em obra` : ''}</span>
+                      <span className="text-[10px] text-stone-400"> {aberta ? '▲' : '▼'}</span>
+                    </button>
+                    <button onClick={() => editarAndaime(i)} title="Corrigir descrição/quantidade total" className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
+                    <button onClick={() => excluirAndaime(i)} title="Apagar cadastro errado" className="p-1 text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={13} /></button>
+                    <button onClick={() => enviarAndaime(i)} className="text-[11px] font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-full px-3 py-1 shrink-0">enviar →</button>
+                  </div>
+                  {aberta && (
+                    <div className="mt-1.5 pt-1.5 border-t border-amber-100 text-[11px] text-stone-600 space-y-1">
+                      {movs.length === 0 && <p>📦 Tudo no pátio — nenhum movimento em aberto.</p>}
+                      {movs.map(m => (
+                        <div key={m.id} className="flex items-center gap-2">
+                          <span className="flex-1">🏗 {m.quantidade}× em <b>{m.obra || '?'}</b> · {m.com_quem || 'sem responsável'} · desde {m.saida ? m.saida.split('-').reverse().join('/') : '—'}</span>
+                          <button onClick={() => voltouAndaime(m, i)} className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 shrink-0">← voltou</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

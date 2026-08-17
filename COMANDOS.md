@@ -31,6 +31,7 @@ e quando usar. Par do `CLAUDE.md` (identidade) e do `ERROS-E-LICOES.md`
 | `supabase_vps.sql` | P/ quando migrar ao Supabase self-hosted da VPS (n8n compartilha a sequência F) |
 | `estoque_schema.sql` | Referência do módulo Estoque multi-contrato (futuro, DDL completo) |
 | `FINANCEIRO.sql` | Módulo financeiro (v47): tabela `contrato_financeiro` c/ RLS **SÓ Lucas/Rafael** — rodar 1x; valores nunca vão pro código |
+| `ANDAIME.sql` | Módulo andaime (v76): `andaime_item` + `andaime_movimento` — patrimônio FORA do contrato (não polui a medição). Rodar 1x; a aba Andaime do app avisa enquanto faltar |
 
 Regra: SQL novo = arquivo no repo + idempotente + SELECT de conferência no
 fim + entrada na ordem do DEPLOY.md. SQL "colado no chat" não existe (lição #20).
@@ -52,6 +53,8 @@ Chaves em `fpv_supabase.env` (NUNCA no repo).
 | `inspect_fontes.ps1` / `inspect_materiais.ps1` | Inspeção read-only das planilhas-fonte | ✔ |
 | `boletim_operacional.ps1` | Boletim diário (seção 1) | ✔ sempre |
 | `espelho_edmar.ps1` | Espelho xlsx p/ Edmar (seção 1) | ✔ sempre |
+| `ponte_email_os.ps1` | PONTE e-mail→banco: sobe as O.S. que o n8n salvou no Drive (check-then-insert, lê nível/área/prazo do xlsx) | ✔ sempre (rotina diária) |
+| `monitor_pedidos.ps1` | MONITOR DE PEDIDOS: matriz 3 canais (e-mail × app × prova material/foto) → xlsx na _AUDITORIA; avisa exports WhatsApp pendentes | ✔ sempre ("roda o monitor de pedidos") |
 
 ## 4) Fluxos n8n (prontos no repo, ⚠️ AINDA NÃO INSTALADOS)
 
