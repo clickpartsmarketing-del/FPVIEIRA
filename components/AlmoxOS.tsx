@@ -989,6 +989,19 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
             const unid = (fs: Ferramenta[]) => fs.reduce((t, f) => t + Number(f.quantidade || 1), 0);
             // T12:00 evita o off-by-one de fuso ao parsear data pura (padrão hojeLocal)
             const fora7 = emCampo.filter(f => f.desde && (Date.now() - new Date(f.desde + 'T12:00:00').getTime()) / 86400000 >= 7);
+            // SALDO UNITÁRIO POR FERRAMENTA (pedido Renan 17/08): o João numera os
+            // itens ("SERRA MÁRMORE 01/02/03") — aqui a numeração final vira uma
+            // FAMÍLIA só, com o saldo ao lado: quantas no estoque / total / em campo.
+            // O sufixo removido é apenas "número (+1 letra)" no FIM: "MARTELETE 5KG"
+            // e "ESCADA 7 DEGRAUS" não são tocados.
+            const familia = (d: string) => d.trim().toUpperCase().replace(/\s+\d+\s*[A-ZÀ-Ü]?$/, '').replace(/\s{2,}/g, ' ').trim() || d.trim().toUpperCase();
+            const familias: Record<string, { total: number; campo: number }> = {};
+            for (const f of ferramentas) {
+              const k = familia(f.descricao);
+              const q = Number(f.quantidade || 1);
+              (familias[k] = familias[k] || { total: 0, campo: 0 }).total += q;
+              if (f.status === 'EM CAMPO') familias[k].campo += q;
+            }
             const grupos: Record<string, Ferramenta[]> = {};
             for (const f of emCampo) { const k = (f.com_quem || 'Sem responsável').trim(); (grupos[k] = grupos[k] || []).push(f); }
             return (
@@ -1011,6 +1024,22 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                   <p className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
                     ⏰ {fora7.length} ferramenta(s) em campo há 7+ dias — cobrar devolução
                   </p>
+                )}
+                {/* saldo de cada ferramenta ao lado do nome — rolagem rápida do João */}
+                {Object.keys(familias).length > 0 && (
+                  <div>
+                    <div className="text-xs font-bold text-stone-500 mb-1.5">📊 Saldo por ferramenta</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {Object.entries(familias).sort((a, b) => a[0].localeCompare(b[0])).map(([nome, s]) => (
+                        <div key={nome} className="flex items-center justify-between gap-2 border border-stone-100 rounded-lg px-2.5 py-1 text-[12px]">
+                          <span className="truncate font-medium text-stone-700">{nome}</span>
+                          <span className={`shrink-0 font-bold ${s.total - s.campo === 0 ? 'text-amber-700' : 'text-fpv-700'}`}>
+                            {s.total - s.campo}/{s.total} no estoque{s.campo > 0 ? ` · ${s.campo} em campo` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 {Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0])).map(([quem, fs]) => (
                   <div key={quem}>
