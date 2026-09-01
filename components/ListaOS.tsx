@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp, Share2 } from 'lucide-react';
 import { OSCampo, refDaOS, MED_OPTIONS, buscaNorm } from '../types';
 import { medDoMes, hojeLocal, DESIGNADOS } from '../config';
 import { osService } from '../services/osService';
+import { compartilharOS } from '../services/compartilhar';
 import { supabase } from '../services/supabaseClient';
 
 interface Props {
@@ -160,6 +161,13 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const copiarCobranca = (f: OSCampo) => {
     const txt = `Fiscal ${f.fiscal || ''}: favor emitir a O.S. para o atendimento ${refDaOS(f)} — ${f.unidade} — ${(f.solicitado || f.servico || '').trim()}${f.conclusao ? `, executado em ${f.conclusao}` : ''}.`;
     try { navigator.clipboard.writeText(txt); alert('📋 Texto copiado — cole no WhatsApp do fiscal.'); } catch { prompt('Copie o texto:', txt); }
+  };
+
+  // v78: compartilhar no grupo com a legenda padrão + as fotos da O.S.
+  const compartilhar = async (os: OSCampo) => {
+    const r = await compartilharOS(os, medDoMes());
+    if (r === 'copiado') alert('📋 Legenda copiada — cole no grupo e anexe as fotos.');
+    if (r === 'erro') alert('Não deu pra compartilhar neste aparelho.');
   };
 
   // MEDIÇÃO FECHADA = intocável (spec do engenheiro): só a vigente edita.
@@ -401,6 +409,9 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                         <button onClick={() => vincularNumero(os)} title="Chegou a O.S. oficial por e-mail? Vincular nº"
                           className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"><Hash size={16} /></button>
                       )}
+                      {/* v78: manda pro grupo com a legenda padrão + fotos */}
+                      <button onClick={() => compartilhar(os)} title="Compartilhar no grupo (legenda + fotos)"
+                        className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-fpv-50 rounded-lg"><Share2 size={16} /></button>
                       <button onClick={() => aoEditar(os)} title="Editar"
                         className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-stone-50 rounded-lg"><Pencil size={16} /></button>
                       {podeExcluir && (

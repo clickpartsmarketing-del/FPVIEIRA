@@ -6,6 +6,7 @@ import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
 import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, medDoMes, hojeLocal } from '../config';
 import { osService } from '../services/osService';
+import { compartilharOS } from '../services/compartilhar';
 
 const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
 
@@ -51,6 +52,9 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   const [baixaAuto, setBaixaAuto] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState('');
+  // v78: O.S. recém-salva, p/ oferecer o compartilhamento no grupo
+  const [ultimaSalva, setUltimaSalva] = useState<OSCampo | null>(null);
+  const [msgShare, setMsgShare] = useState('');
   const [ouvindo, setOuvindo] = useState(false);
   const recRef = useRef<any>(null);
   const fotoRef = useRef<HTMLInputElement>(null);
@@ -122,7 +126,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
   const campo = (k: keyof OSCampo, v: any) => setOs(prev => ({ ...prev, [k]: v }));
 
-  const limpar = () => { try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ } setRascunho(null); setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); aoCancelarEdicao(); };
+  const limpar = () => { try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ } setRascunho(null); setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); setUltimaSalva(null); setMsgShare(''); aoCancelarEdicao(); };
 
   const mudaKit = (descricao: string, delta: number) =>
     setKit(prev => {
@@ -230,6 +234,10 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     }
 
     setMsg((os.id ? 'O.S. atualizada ✔' : `O.S. ${ref ? ref + ' ' : ''}registrada no banco central ✔`) + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : '') + msgKit);
+    // v78: a O.S. acabou de salvar com a foto no Storage — oferece mandar
+    // pro grupo JÁ com a legenda padrão (antes a foto ia solta e ninguém
+    // sabia de qual escola/serviço era)
+    if (salva) setUltimaSalva({ ...salva, foto_urls: urls } as OSCampo);
     try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ }
     setRascunho(null);
     setOs(vaziaPara(usuario));
@@ -483,6 +491,33 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       </div>
 
       {msg && <div className="text-sm font-medium text-fpv-700 bg-fpv-50 border border-fpv-100 rounded-lg px-3 py-2">{msg}</div>}
+
+      {/* v78: mandar pro grupo COM legenda, na hora — a foto para de ir solta */}
+      {ultimaSalva && (
+        <div className="bg-white border-2 border-fpv-200 rounded-xl p-3 space-y-2">
+          <p className="text-[12px] font-bold text-stone-800">
+            Mandar a {refDaOS(ultimaSalva)} pro grupo?
+            <span className="font-medium text-stone-500"> vai com a legenda padrão{(ultimaSalva.foto_urls?.length || 0) > 0 ? ` e ${ultimaSalva.foto_urls.length} foto(s)` : ''}.</span>
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={async () => {
+              setMsgShare('preparando…');
+              const r = await compartilharOS(ultimaSalva, medDoMes());
+              setMsgShare(
+                r === 'compartilhado' ? '✔ enviado' :
+                r === 'copiado' ? '📋 legenda copiada — cole no grupo e anexe as fotos' :
+                r === 'cancelado' ? '' : 'não deu pra compartilhar neste aparelho'
+              );
+              if (r === 'compartilhado') setTimeout(() => { setUltimaSalva(null); setMsgShare(''); }, 1200);
+            }} className="flex-1 bg-fpv-600 active:bg-fpv-700 text-white font-bold py-2.5 rounded-xl text-sm">
+              📤 Compartilhar no grupo
+            </button>
+            <button type="button" onClick={() => { setUltimaSalva(null); setMsgShare(''); }}
+              className="px-4 border border-stone-300 rounded-xl text-sm font-bold text-stone-600">agora não</button>
+          </div>
+          {msgShare && <p className="text-[11px] text-stone-500">{msgShare}</p>}
+        </div>
+      )}
 
       <div className="flex gap-3 pt-1">
         <button type="submit" disabled={salvando}
