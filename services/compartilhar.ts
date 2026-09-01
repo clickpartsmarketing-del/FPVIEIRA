@@ -92,16 +92,17 @@ export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean
   const textos = [os.servico, os.solicitado, os.materiais];
 
   linha('Unidade', os.unidade);
+  // Local: o que a equipe digitou; se não digitou, deduz do texto
   linha('Local', (os as any).local || deduz(LOCAIS, ...textos));
-  linha('Tipo', os.area || deduz(TIPOS, ...textos));
-  linha('Criticidade', os.classificacao || os.tipo); // Emergencial · Urgente · Corretiva · Preventiva
-  // pedido e executado costumam ser o MESMO texto (a equipe copia o pedido
-  // do fiscal) — nesse caso sai só "Executado", sem repetir a linha
+  // Tipo NUNCA fica vazio: sem disciplina identificada é "OUTROS SERVIÇOS"
+  linha('Tipo', (os.area || deduz(TIPOS, ...textos) || 'OUTROS SERVIÇOS').toUpperCase());
+  linha('Criticidade', String(os.classificacao || os.tipo || '').toUpperCase());
+  // O modelo do grupo mostra só o que FOI FEITO. A descrição (pedido do
+  // fiscal) só entra quando ainda não há execução — aí é o que temos.
   const pedido = String(os.solicitado ?? '').trim();
   const feito = String(os.servico ?? '').trim();
-  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ');
-  if (pedido && norm(pedido) !== norm(feito)) linha('Descrição', pedido);
-  linha('Executado', feito);
+  if (feito) linha('Executado', feito);
+  else linha('Descrição', pedido);
   linha('Executante', os.executor);
 
   // detalhe extra só quando pedido (gestão/medição) — no grupo o curto é melhor

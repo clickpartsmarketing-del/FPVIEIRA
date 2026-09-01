@@ -6,6 +6,7 @@ export interface OSCampo {
   emergencial: boolean;
   tipo?: string | null; // Emergencial | Corretiva | Preventiva (spec Renan 06/07)
   unidade: string;
+  local?: string | null; // onde DENTRO da unidade: Cozinha, Sala 12, Consultório 03 (v81)
   fiscal: string;
   classificacao: string;
   entrada: string | null;

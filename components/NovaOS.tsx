@@ -22,6 +22,7 @@ const vaziaPara = (usuario: string): OSCampo => {
     emergencial: !!equipe,
     tipo: equipe ? 'Emergencial' : 'Corretiva',
     unidade: '',
+    local: '',
     fiscal: equipe?.fiscal ?? 'Wellington',
     classificacao: equipe ? 'Emergencial' : 'Normal',
     entrada: hojeLocal(),
@@ -313,6 +314,24 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
           placeholder="comece a digitar…"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         <datalist id="escolas">{ESCOLAS.map(e => <option key={e} value={e} />)}</datalist>
+      </div>
+
+      {/* v81: ONDE dentro da unidade — vai na legenda que o campo manda no
+          grupo ("Local: Consultório 03 recepção principal"). Texto livre com
+          sugestões: cada escola tem nome próprio pras salas. */}
+      <div>
+        <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">
+          Local <span className="font-medium normal-case text-stone-400">— onde dentro da unidade</span>
+        </label>
+        <input list="locais" value={os.local || ''} onChange={e => campo('local', e.target.value)}
+          placeholder="ex.: Cozinha · Sala 12 · Banheiro dos alunos"
+          className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
+        <datalist id="locais">
+          {['Cozinha', 'Refeitório', 'Banheiro dos alunos', 'Banheiro dos professores', 'Secretaria',
+            'Direção', 'Sala de aula', 'Pátio', 'Quadra', 'Corredor', 'Recepção', 'Almoxarifado',
+            'Depósito', 'Despensa', 'Berçário', 'Biblioteca', 'Sala de recursos', 'Vestiário',
+            'Telhado', 'Caixa d\'água', 'Portão de entrada', 'Área externa'].map(l => <option key={l} value={l} />)}
+        </datalist>
       </div>
 
       {/* executor em 1 toque: membros da equipe do login */}

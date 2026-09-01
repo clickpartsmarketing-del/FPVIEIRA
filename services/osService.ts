@@ -45,10 +45,10 @@ export const osService = {
 
     if (os.id) {
       let { error } = await supabase.from('os_campo').update(payload).eq('id', os.id);
-      // resiliência: banco sem coluna nova ainda ('area'/'geo') → tira e salva
-      if (error && /'(area|geo)'/i.test(error.message)) {
+      // resiliência: banco sem coluna nova ainda ('area'/'geo'/'local') → tira e salva
+      if (error && /'(area|geo|local)'/i.test(error.message)) {
         const p2: any = { ...payload };
-        delete p2.area; delete p2.geo;
+        delete p2.area; delete p2.geo; delete p2.local;
         ({ error } = await supabase.from('os_campo').update(p2).eq('id', os.id));
       }
       return { ok: !error, erro: error?.message };
@@ -99,6 +99,13 @@ export const osService = {
         base.fict_ref = `F-${f2}`;
         ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
       }
+    }
+
+    // sem a coluna 'local' (LOCAL-OS.sql pendente) → tira e insere assim mesmo:
+    // a O.S. entra sem o local em vez de o campo perder o registro inteiro
+    if (error && /'local'/i.test(error.message)) {
+      delete base.local;
+      ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
     }
 
     // resiliência: se o banco ainda não tem a coluna 'solicitado',
