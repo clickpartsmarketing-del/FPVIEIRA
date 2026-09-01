@@ -36,6 +36,49 @@ const STATUS_LEGENDA: Record<string, string> = {
 //   Tipo: HIDRÁULICA
 //   Criticidade: Emergencial
 //   Descrição: Manutenção na porta da sala de aula
+// LOCAL e TIPO quase nunca vêm preenchidos (a `area` está vazia na maioria
+// das O.S. e não existe campo de local). Como a descrição do fiscal quase
+// sempre diz — "MANUTENÇÃO NA COZINHA", "troca de torneira do banheiro" —
+// a legenda deduz do texto. Conservador: só assume quando a palavra
+// aparece; na dúvida a linha não sai (melhor faltar que mentir).
+const LOCAIS: [RegExp, string][] = [
+  [/cozinha/i, 'Cozinha'], [/refeit[óo]rio/i, 'Refeitório'],
+  [/banheiro|sanit[áa]rio|vaso|lavat[óo]rio|wc\b/i, 'Banheiro'],
+  [/secretaria/i, 'Secretaria'], [/dire[çc][ãa]o/i, 'Direção'],
+  [/sala de aula|sala \d+|salas de aula/i, 'Sala de aula'],
+  [/p[áa]tio/i, 'Pátio'], [/quadra/i, 'Quadra'], [/corredor/i, 'Corredor'],
+  [/bebedouro/i, 'Bebedouro'], [/almoxarifado/i, 'Almoxarifado'],
+  [/dep[óo]sito|despensa/i, 'Depósito'], [/vesti[áa]rio/i, 'Vestiário'],
+  [/recep[çc][ãa]o/i, 'Recepção'], [/telhado|calha/i, 'Telhado'],
+  [/caixa d.?[áa]gua|cisterna|reservat[óo]rio/i, 'Caixa d\'água'],
+  [/portão|portao|entrada principal/i, 'Portão'],
+  [/ber[çc][áa]rio/i, 'Berçário'], [/biblioteca/i, 'Biblioteca'],
+];
+const TIPOS: [RegExp, string][] = [
+  [/l[âa]mpada|tomada|interruptor|disjuntor|el[ée]tric|fia[çc][ãa]o|circuito|luminária|calha de ilumina|energia|curto/i, 'ELÉTRICA'],
+  [/torneira|sif[ãa]o|descarga|vazamento|hidr[áa]ulic|registro|bomba d.?[áa]gua|rabicho|v[áa]lvula|cuba|ducha|entupi/i, 'HIDRÁULICA'],
+  [/esgoto|caixa de gordura|fossa|ralo/i, 'HIDRÁULICA E ESGOTO'],
+  [/fechadura|porta|ma[çc]aneta|dobradi[çc]a|caixilho|divis[óo]ria|alizar|batente/i, 'CARPINTARIA'],
+  [/pintura|pintar|tinta|massa corrida|l[áa]tex/i, 'PINTURA'],
+  [/vidro|vidra[çc]/i, 'VIDRAÇARIA'],
+  [/grade|solda|serralh|port[ãa]o met[áa]lico|corrim[ãa]o/i, 'SERRALHERIA'],
+  [/piso|azulejo|alvenaria|reboco|argamassa|parede|forro|gesso|pastilha|revestimento/i, 'CIVIL'],
+  [/ar condicionado|refrigera[çc]|geladeira|freezer/i, 'REFRIGERAÇÃO'],
+];
+// vence quem tem MAIS ocorrências, não quem vem primeiro na lista: a O.S.
+// "troca de espude, anel de cera, parafuso de vaso, INTERRUPTOR, descargas"
+// é hidráulica com um item elétrico no meio — pela ordem sairia ELÉTRICA
+const deduz = (tabela: [RegExp, string][], ...textos: (string | null | undefined)[]): string => {
+  const t = textos.filter(Boolean).join(' ');
+  if (!t.trim()) return '';
+  let melhor = '', pontos = 0;
+  for (const [re, valor] of tabela) {
+    const n = (t.match(new RegExp(re.source, 'gi')) || []).length;
+    if (n > pontos) { pontos = n; melhor = valor; }
+  }
+  return melhor;
+};
+
 export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean } = {}): string => {
   const L: string[] = [];
   L.push(`*${refDaOS(os)}* — ${STATUS_LEGENDA[os.status] || os.status}`);
@@ -44,18 +87,27 @@ export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean
     const v = String(val ?? '').trim();
     if (v) L.push(`${rot}: ${v}`);
   };
-  linha('Unidade', os.unidade);
-  linha('Local', (os as any).local);           // campo opcional: aparece quando existir
-  linha('Tipo', os.area);                      // disciplina: ELÉTRICA, HIDRÁULICA…
-  linha('Criticidade', os.classificacao || os.tipo); // Emergencial · Urgente · Corretiva · Preventiva
-  linha('Descrição', os.solicitado || os.servico);
+  // o serviço executado é a melhor fonte pra deduzir; o pedido do fiscal
+  // entra junto porque muita O.S. só tem ele preenchido
+  const textos = [os.servico, os.solicitado, os.materiais];
 
-  // o resto só quando pedido (relatório/gestão) — no grupo o curto é melhor
+  linha('Unidade', os.unidade);
+  linha('Local', (os as any).local || deduz(LOCAIS, ...textos));
+  linha('Tipo', os.area || deduz(TIPOS, ...textos));
+  linha('Criticidade', os.classificacao || os.tipo); // Emergencial · Urgente · Corretiva · Preventiva
+  // pedido e executado costumam ser o MESMO texto (a equipe copia o pedido
+  // do fiscal) — nesse caso sai só "Executado", sem repetir a linha
+  const pedido = String(os.solicitado ?? '').trim();
+  const feito = String(os.servico ?? '').trim();
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ');
+  if (pedido && norm(pedido) !== norm(feito)) linha('Descrição', pedido);
+  linha('Executado', feito);
+  linha('Executante', os.executor);
+
+  // detalhe extra só quando pedido (gestão/medição) — no grupo o curto é melhor
   if (opts.detalhado) {
-    linha('Serviço executado', os.servico);
     linha('Materiais', os.materiais);
     linha('Memória de cálculo', os.memoria_calculo);
-    linha('Executor', os.executor);
     linha('Conclusão', br(os.conclusao));
     linha('Medição', med || os.medicao);
   }
