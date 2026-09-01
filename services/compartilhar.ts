@@ -56,7 +56,7 @@ const LOCAIS: [RegExp, string][] = [
 ];
 const TIPOS: [RegExp, string][] = [
   [/l[âa]mpada|tomada|interruptor|disjuntor|el[ée]tric|fia[çc][ãa]o|circuito|luminária|calha de ilumina|energia|curto/i, 'ELÉTRICA'],
-  [/torneira|sif[ãa]o|descarga|vazamento|hidr[áa]ulic|registro|bomba d.?[áa]gua|rabicho|v[áa]lvula|cuba|ducha|entupi/i, 'HIDRÁULICA'],
+  [/torneira|sif[ãa]o|descarga|vazamento|hidr[áa]ulic|registro|bomba d.?[áa]gua|rabicho|v[áa]lvula|cuba|ducha|entupi|vaso sanit|parafuso de vaso|tampa de vaso|assento sanit|sp?ud|espude|anel de cera|caixa acoplada|mict[óo]rio|chuveiro|filtro|bebedouro|tubula[çc]|cano|joelho|luva de \d/i, 'HIDRÁULICA'],
   [/esgoto|caixa de gordura|fossa|ralo/i, 'HIDRÁULICA E ESGOTO'],
   [/fechadura|porta|ma[çc]aneta|dobradi[çc]a|caixilho|divis[óo]ria|alizar|batente/i, 'CARPINTARIA'],
   [/pintura|pintar|tinta|massa corrida|l[áa]tex/i, 'PINTURA'],
@@ -83,9 +83,13 @@ export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean
   const L: string[] = [];
   L.push(`*${refDaOS(os)}* — ${STATUS_LEGENDA[os.status] || os.status}`);
 
+  // só entra na legenda o que tem CONTEÚDO: a equipe às vezes digita "." ou
+  // "," só pra passar da validação de memória obrigatória, e isso ia pro
+  // grupo como "Quantificação: ,"
+  const temTexto = (s: string) => /[a-zA-ZÀ-ÿ0-9]/.test(s);
   const linha = (rot: string, val?: string | null) => {
     const v = String(val ?? '').trim();
-    if (v) L.push(`${rot}: ${v}`);
+    if (v && temTexto(v)) L.push(`${rot}: ${v}`);
   };
   // o serviço executado é a melhor fonte pra deduzir; o pedido do fiscal
   // entra junto porque muita O.S. só tem ele preenchido
@@ -97,6 +101,11 @@ export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean
   // Tipo NUNCA fica vazio: sem disciplina identificada é "OUTROS SERVIÇOS"
   linha('Tipo', (os.area || deduz(TIPOS, ...textos) || 'OUTROS SERVIÇOS').toUpperCase());
   linha('Criticidade', String(os.classificacao || os.tipo || '').toUpperCase());
+  // Quantificação É a memória de cálculo (definição do Renan): "1 fechadura",
+  // "Vidro 18×26" — é o número que vira item EMOP na medição. Sem memória a
+  // linha não sai; NÃO cai em materiais, que é outra coisa (o que saiu do
+  // almoxarifado, não o que foi medido).
+  linha('Quantificação', os.memoria_calculo);
   // O modelo do grupo mostra só o que FOI FEITO. A descrição (pedido do
   // fiscal) só entra quando ainda não há execução — aí é o que temos.
   const pedido = String(os.solicitado ?? '').trim();
