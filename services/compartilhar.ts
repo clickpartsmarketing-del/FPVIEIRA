@@ -16,35 +16,49 @@ import { OSCampo, refDaOS } from '../types';
 
 const br = (iso?: string | null) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '');
 
-// a legenda que vai junto com as fotos no grupo
-export const legendaOS = (os: OSCampo, med?: string): string => {
+// o status concorda com "a O.S." (feminino) — é assim que o campo fala
+const STATUS_LEGENDA: Record<string, string> = {
+  'Concluído': 'Concluída',
+  'Assinatura': 'Em assinatura',
+  'Avaliando': 'Em avaliação',
+  'Material': 'Aguardando material',
+};
+
+// LEGENDA PADRÃO (layout definido pelo Renan 31/08, vindo do contrato de
+// Saquarema). A referência é a NOSSA (nº oficial da prefeitura ou a
+// fictícia da equipe) — o OSE-nnnn é a numeração de lá, não a daqui.
+// Linha sem valor não aparece: O.S. sem área/local sai enxuta em vez de
+// sair com campo vazio.
+//
+//   *2190* — Concluída
+//   Unidade: Creche M. Márcia Lustosa Machado
+//   Local: Cozinha                (só quando houver o dado)
+//   Tipo: HIDRÁULICA
+//   Criticidade: Emergencial
+//   Descrição: Manutenção na porta da sala de aula
+export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean } = {}): string => {
   const L: string[] = [];
-  L.push(`*O.S. ${refDaOS(os)} — ${os.unidade}*`);
+  L.push(`*${refDaOS(os)}* — ${STATUS_LEGENDA[os.status] || os.status}`);
 
-  const cab: string[] = [];
-  if (os.fiscal) cab.push(`Fiscal: ${os.fiscal}`);
-  if (os.executor) cab.push(`Executor: ${os.executor}`);
-  if (cab.length) L.push(cab.join(' · '));
-
-  const datas: string[] = [];
-  if (os.entrada) datas.push(`Entrada: ${br(os.entrada)}`);
-  if (os.conclusao) datas.push(`Conclusão: ${br(os.conclusao)}`);
-  datas.push(os.status);
-  if (med || os.medicao) datas.push(String(med || os.medicao));
-  L.push(datas.join(' · '));
-
-  const bloco = (rot: string, val?: string | null) => {
-    const v = (val || '').trim();
-    if (v) L.push('', `*${rot}:* ${v}`);
+  const linha = (rot: string, val?: string | null) => {
+    const v = String(val ?? '').trim();
+    if (v) L.push(`${rot}: ${v}`);
   };
-  bloco('Fiscal pediu', os.solicitado);
-  bloco('Serviço executado', os.servico);
-  bloco('Materiais', os.materiais);
-  bloco('Memória de cálculo', os.memoria_calculo);
+  linha('Unidade', os.unidade);
+  linha('Local', (os as any).local);           // campo opcional: aparece quando existir
+  linha('Tipo', os.area);                      // disciplina: ELÉTRICA, HIDRÁULICA…
+  linha('Criticidade', os.classificacao || os.tipo); // Emergencial · Urgente · Corretiva · Preventiva
+  linha('Descrição', os.solicitado || os.servico);
 
-  const n = os.foto_urls?.length || 0;
-  if (n) L.push('', `📷 ${n} foto${n > 1 ? 's' : ''}`);
-  L.push('', '_F.P. Vieira Engenharia · FP.094 Educação_');
+  // o resto só quando pedido (relatório/gestão) — no grupo o curto é melhor
+  if (opts.detalhado) {
+    linha('Serviço executado', os.servico);
+    linha('Materiais', os.materiais);
+    linha('Memória de cálculo', os.memoria_calculo);
+    linha('Executor', os.executor);
+    linha('Conclusão', br(os.conclusao));
+    linha('Medição', med || os.medicao);
+  }
   return L.join('\n');
 };
 
@@ -69,8 +83,8 @@ export type ResultadoShare = 'compartilhado' | 'copiado' | 'cancelado' | 'erro';
 
 // Compartilha no grupo: no celular abre a folha nativa (WhatsApp, e-mail…)
 // com legenda + fotos; no desktop copia a legenda pra área de transferência.
-export const compartilharOS = async (os: OSCampo, med?: string): Promise<ResultadoShare> => {
-  const texto = legendaOS(os, med);
+export const compartilharOS = async (os: OSCampo, med?: string, opts: { detalhado?: boolean } = {}): Promise<ResultadoShare> => {
+  const texto = legendaOS(os, med, opts);
   const urls = os.foto_urls || [];
   const nav = navigator as any;
 
