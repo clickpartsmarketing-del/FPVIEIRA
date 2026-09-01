@@ -79,15 +79,91 @@ const estagio = (o: OSCampo): 'cancelada' | 'medido' | 'assinado' | 'feito' | 'r
   return 'fila';
 };
 
+// download via Blob (v77): o data:-URI antigo estourava o limite de URL do
+// navegador no "exportar tudo" (2.400+ O.S.); o <a> precisa estar no DOM
+// pro Firefox/WebView do celular aceitar o clique
+const baixarArquivo = (conteudo: string, nome: string, mime: string) => {
+  const url = URL.createObjectURL(new Blob([conteudo], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
+
 const gerarCSV = (oss: OSCampo[], nome: string) => {
   const head = ['OS', 'F', 'Unidade', 'Fiscal', 'Classificação', 'Entrada', 'Conclusão', 'Executor', 'Status', 'Medição', 'Fiscal pediu', 'Serviço executado', 'Materiais', 'Memória de cálculo', 'Fotos', 'Assinado'];
-  const q = (v: any) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  // \r no teste além do ; " \n: um \r solto quebraria a linha sem aspas
+  const q = (v: any) => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const rows = oss.map(o => [o.numero, o.fict_ref || (o.numero_fict ? 'F-' + o.numero_fict : ''), o.unidade, o.fiscal, o.classificacao, br(o.entrada), br(o.conclusao), o.executor, o.status, o.medicao, o.solicitado, o.servico, o.materiais, o.memoria_calculo, o.foto_urls?.length || 0, o.assinado ? 'SIM' : 'NÃO'].map(q).join(';'));
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('﻿' + head.join(';') + '\n' + rows.join('\n'));
-  a.download = nome;
-  a.click();
+  baixarArquivo('﻿' + head.join(';') + '\n' + rows.join('\n'), nome, 'text/csv;charset=utf-8');
 };
+
+// ---------- relatório fotográfico (v77, pedido do Renan 31/08) ----------
+// Dor que resolve: a emergencial é atendida e a foto morre no grupo do
+// WhatsApp, solta e sem legenda. Aqui a mesma foto que subiu no ato do
+// registro volta como DOCUMENTO: capa + foto com legenda padrão (ref,
+// unidade, quem pediu, quem fez, datas, serviço e memória).
+// Abre no navegador → Ctrl+P → PDF → manda no grupo / anexa na medição.
+// NÃO exige os 5 selos de propósito: a assinatura só vem quando o fiscal
+// aprova, e o relatório é justamente o que vai ATÉ ele.
+const escHtml = (s: any) =>
+  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const gerarRelatorioFotografico = (oss: OSCampo[], med: string) => {
+  const hoje = new Date();
+  const dataBR = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+  const totalFotos = oss.reduce((n, o) => n + (o.foto_urls?.length || 0), 0);
+  const unidades = new Set(oss.map(o => o.unidade)).size;
+
+  const blocos = oss.map(o => {
+    // sem loading="lazy": o destino é IMPRESSÃO — foto fora do viewport
+    // sairia em branco no PDF
+    const fotos = (o.foto_urls || []).map(u =>
+      `<figure><img src="${escHtml(u)}" alt="Foto da O.S. ${escHtml(refDaOS(o))}"></figure>`).join('');
+    const linha = (rot: string, val?: string | null) =>
+      (val || '').trim() ? `<p><b>${rot}:</b> ${escHtml(val)}</p>` : '';
+    return `<section class="os">
+      <h2>O.S. ${escHtml(refDaOS(o))} — ${escHtml(o.unidade)}</h2>
+      <p class="meta">Fiscal: <b>${escHtml(o.fiscal || '—')}</b> · Executor: <b>${escHtml(o.executor || '—')}</b>
+        · Entrada: <b>${br(o.entrada) || '—'}</b> · Conclusão: <b>${br(o.conclusao) || '—'}</b>
+        · Status: <b>${escHtml(o.status)}</b>${o.medicao ? ` · ${escHtml(o.medicao)}` : ''}</p>
+      ${linha('Fiscal pediu', o.solicitado)}
+      ${linha('Serviço executado', o.servico)}
+      ${linha('Materiais', o.materiais)}
+      ${(o.memoria_calculo || '').trim() ? `<p class="memoria"><b>Memória de cálculo:</b><br>${escHtml(o.memoria_calculo).replace(/\n/g, '<br>')}</p>` : ''}
+      ${fotos ? `<div class="fotos">${fotos}</div>` : '<p class="semfoto">⚠ sem foto anexada</p>'}
+    </section>`;
+  }).join('\n');
+
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FP.094 Educação · ${escHtml(med)} — Relatório fotográfico</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a18;background:#fff;margin:0;padding:24px;font-size:13px;line-height:1.5}
+.capa{border-bottom:3px solid #1a1a18;padding-bottom:12px;margin-bottom:20px}
+.capa h1{font-size:20px;margin:0 0 4px}.capa p{margin:2px 0;color:#555}
+.os{border:1px solid #ddd;border-radius:8px;padding:14px 16px;margin-bottom:16px;page-break-inside:avoid}
+.os h2{font-size:15px;margin:0 0 4px}.meta{color:#555;font-size:12px;margin:0 0 8px}
+.memoria{background:#f6f5f0;border-radius:6px;padding:8px 10px}
+.fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px}
+.fotos figure{margin:0}.fotos img{width:100%;height:180px;object-fit:cover;border-radius:6px;border:1px solid #ddd}
+.semfoto{color:#a32d2d;font-weight:700}
+@media print{body{padding:0}.os{border:none;border-top:1px solid #999;border-radius:0}.fotos img{height:150px}}
+</style></head><body>
+<div class="capa">
+  <h1>F.P. Vieira Engenharia — FP.094 Educação · ${escHtml(med)}</h1>
+  <p>Relatório fotográfico e memória de cálculo · gerado em ${dataBR}</p>
+  <p><b>${oss.length}</b> O.S. · <b>${unidades}</b> unidade(s) · <b>${totalFotos}</b> foto(s)</p>
+</div>
+${blocos}</body></html>`;
+};
+
+const baixarRelatorioFotografico = (oss: OSCampo[], med: string) =>
+  baixarArquivo(gerarRelatorioFotografico(oss, med),
+    `${med.replace(' ', '')}_relatorio_fotografico.html`, 'text/html;charset=utf-8');
 
 // ---------- sistema visual compartilhado ----------
 
@@ -900,6 +976,14 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
   const travadas = universo.filter(o => selosDaOS(o).contagem <= 3);
   const jaMedidas = lista.filter(o => (o.medicao || '') !== '').length;
 
+  // v77: universo do RELATÓRIO FOTOGRÁFICO — tudo que tem foto na medição
+  // corrente ou ainda sem medição. Não exige os 5 selos: a assinatura só
+  // vem depois que o fiscal aprova, e é o relatório que vai até ele.
+  const comFoto = lista
+    .filter(o => o.status !== 'Cancelada' && (o.foto_urls?.length || 0) > 0
+      && ((o.medicao || '') === med || !(o.medicao || '')))
+    .sort((a, b) => (a.unidade || '').localeCompare(b.unidade || ''));
+
   // funil cumulativo dos 5 selos
   const ordemSelos: ('concluida' | 'memoria' | 'foto' | 'numero' | 'assinatura')[] = ['concluida', 'memoria', 'foto', 'numero', 'assinatura'];
   const cumulativo = ordemSelos.map((_, i) =>
@@ -1159,6 +1243,15 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
             <Download size={16} />
             {prontas.length ? `Exportar PRONTAS (${prontas.length}) — ${med}` : 'Nada 100% pronto ainda. Cobre as pendências acima.'}
           </button>
+          {/* v77: a foto que morria no grupo vira documento com legenda */}
+          <button onClick={() => baixarRelatorioFotografico(comFoto, med)} disabled={comFoto.length === 0}
+            className="w-full mt-2 bg-white border border-fpv-200 text-fpv-700 disabled:text-stone-400 disabled:border-stone-200 font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm">
+            <Camera size={15} />
+            {comFoto.length ? `Relatório fotográfico (${comFoto.length} O.S. c/ foto)` : 'Nenhuma O.S. com foto ainda'}
+          </button>
+          <p className="text-[10px] text-stone-400 text-center mt-1">
+            abre no navegador · Ctrl+P salva em PDF pra mandar no grupo ou anexar na medição
+          </p>
           <button onClick={() => setConfirmar('tudo')} className="w-full text-[11px] text-stone-500 underline mt-2">
             exportar tudo ({lista.length}) p/ conferência
           </button>
