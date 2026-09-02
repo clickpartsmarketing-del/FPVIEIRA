@@ -8,7 +8,8 @@
 // no repo intacto — religar = trocar para true.
 export const VOZ_ATIVA = false;
 
-export const GESTORES = ['lucas', 'rafael', 'nicolas', 'renan', 'edmar'];
+// Nicolas saiu em 01/09 (conta bloqueada); Marcio Junior assumiu a assistência
+export const GESTORES = ['lucas', 'rafael', 'marcio', 'renan', 'edmar'];
 
 // João só enxerga o Almoxarifado — ele é o responsável pelo estoque,
 // não lança O.S. (gestão também vê a aba p/ acompanhar)
@@ -27,12 +28,15 @@ export const ALMOX = ['joao'];
 // não mudam — só a zona que cada equipe enxerga.
 // TROCA Renan 07/07: Miqueias SAIU da emergencia2; entrou o eletricista
 // RENATO como encarregado (não confundir com o fiscal Renato, que é da
-// prefeitura e por coincidência tem o mesmo nome). Prefixo M continua —
-// a numeração M-nn não reinicia.
+// prefeitura e por coincidência tem o mesmo nome).
+// CORREÇÃO Renan 01/09: o M era do MIQUEIAS e ficou herdado por engano —
+// a equipe do Renato passa a numerar R01, R02… As O.S. M-nn já existentes
+// NÃO mudam: o material do almoxarifado está amarrado nessas referências
+// (renomear em massa quebraria o vínculo material↔O.S.).
 export interface Equipe { fiscal: string; membros: string[]; prefixo: string; apelido: string; }
 export const EQUIPES: Record<string, Equipe> = {
   emergencia1: { fiscal: 'Wellington', membros: ['Wellington', 'Leandro'], prefixo: 'L', apelido: 'Equipe Leandro' },
-  emergencia2: { fiscal: 'Renato', membros: ['Renato', 'Patrick'], prefixo: 'M', apelido: 'Equipe Renato' },
+  emergencia2: { fiscal: 'Renato', membros: ['Renato', 'Patrick'], prefixo: 'R', apelido: 'Equipe Renato' },
 };
 
 // Encarregados da CORRETIVA: painel próprio (igual ao emergencial, mas
@@ -41,6 +45,10 @@ export interface Corretiva { executor: string; prefixo: string; apelido: string;
 export const CORRETIVA: Record<string, Corretiva> = {
   gilson: { executor: 'Gilson', prefixo: 'G', apelido: 'Gilson' },
   carlosalberto: { executor: 'Carlos Alberto', prefixo: 'C', apelido: 'Carlos Alberto' },
+  // Emiliano (01/09): encarregado geral, atende Educação e Saúde e assumiu a
+  // frente do Carlos Alberto. O login do Carlos CONTINUA ativo — decisão do
+  // Renan: ainda precisamos coletar as informações que estão com ele.
+  emiliano: { executor: 'Emiliano', prefixo: 'E', apelido: 'Emiliano' },
 };
 
 // LOGIN EM 2 TOQUES (pedido Renan 07/07: "muita recusa" ao digitar o
@@ -52,8 +60,12 @@ export const ACESSOS: Acesso[] = [
   { rotulo: 'Equipe Renato', email: 'emergencia2@fpv.app', dica: 'emergência · zona Renato', emoji: '🚨', grupo: 'campo' },
   { rotulo: 'Gilson', email: 'gilson@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'Carlos Alberto', email: 'carlosalberto@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
+  { rotulo: 'Emiliano', email: 'emiliano@fpv.app', dica: 'encarregado geral', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'João', email: 'joao@fpv.app', dica: 'almoxarifado', emoji: '📦', grupo: 'campo' },
-  { rotulo: 'Nicolas', email: 'nicolas@fpv.app', dica: 'engenharia', emoji: '👷', grupo: 'gestao' },
+  // Nicolas saiu da operação (01/09) — conta bloqueada e fora das listas;
+  // o histórico dele continua no banco (regra dura nº 11). Marcio Junior
+  // entrou no lugar, com login e numeração próprios.
+  { rotulo: 'Marcio Junior', email: 'marcio@fpv.app', dica: 'assistente · engenharia', emoji: '👷', grupo: 'gestao' },
   { rotulo: 'Renan', email: 'renan@fpv.app', dica: 'gestão', emoji: '📊', grupo: 'gestao' },
   { rotulo: 'Lucas', email: 'lucas@fpv.app', dica: 'gestor geral', emoji: '📊', grupo: 'gestao' },
   { rotulo: 'Rafael', email: 'rafael@fpv.app', dica: 'gestão', emoji: '📊', grupo: 'gestao' },
