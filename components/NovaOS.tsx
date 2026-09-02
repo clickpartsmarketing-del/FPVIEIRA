@@ -10,6 +10,12 @@ import { compartilharOS } from '../services/compartilhar';
 
 const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
 
+// Teto de fotos por O.S. (v85). Era 7 e vinha do ChatOS de julho; o campo
+// bateu no limite registrando antes/depois de várias frentes na mesma O.S.
+// Subiu pra 15 — o custo é upload no sinal da escola, não espaço no banco.
+// Mudar aqui muda no formulário inteiro.
+const MAX_FOTOS = 15;
+
 // defaults por login (spec Nicolas): equipe de emergência já entra com
 // fiscal da zona + EMERGENCIAL ligado; encarregado corretivo já entra
 // como executor — "responsável preenchido automaticamente com o login"
@@ -491,9 +497,28 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       </div>
 
       <div>
-        <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Fotos (antes / depois)</label>
+        <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">
+          Fotos (antes / depois)
+          <span className="font-medium normal-case text-stone-400"> — até {MAX_FOTOS} por O.S.</span>
+        </label>
+        {/* v85: o limite era 7 e descartava em SILÊNCIO — o Caleb mandou 7,
+            tentou a 8ª e o app não disse nada (parecia que tinha travado).
+            Agora avisa quantas entraram e quantas ficaram de fora. */}
         <input ref={fotoRef} type="file" accept="image/*" multiple className="hidden"
-          onChange={e => { if (e.target.files) { const selecionadas = Array.from(e.target.files) as File[]; setFotos(prev => [...prev, ...selecionadas].slice(0, 7)); } e.target.value = ''; }} />
+          onChange={e => {
+            if (e.target.files) {
+              const selecionadas = Array.from(e.target.files) as File[];
+              const jaTem = fotos.length + (os.foto_urls?.length || 0);
+              const cabem = Math.max(0, MAX_FOTOS - jaTem);
+              const entram = selecionadas.slice(0, cabem);
+              const sobraram = selecionadas.length - entram.length;
+              if (entram.length) setFotos(prev => [...prev, ...entram]);
+              setMsg(sobraram > 0
+                ? `📷 ${entram.length} foto(s) anexada(s). ${sobraram} não entrou(ram): o limite é ${MAX_FOTOS} por O.S. (você já tem ${jaTem + entram.length}). Salve esta e registre o restante na próxima, ou apague alguma acima.`
+                : `📷 ${entram.length} foto(s) anexada(s) — ${jaTem + entram.length}/${MAX_FOTOS}.`);
+            }
+            e.target.value = '';
+          }} />
         <div className="flex flex-wrap gap-2 items-center">
           <button type="button" onClick={() => fotoRef.current?.click()}
             className="flex items-center gap-2 text-sm font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 px-4 py-2.5 rounded-lg hover:bg-fpv-100">
@@ -506,6 +531,9 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
             </span>
           ))}
           {os.foto_urls.length > 0 && <span className="text-xs text-stone-400">{os.foto_urls.length} já no banco</span>}
+          <span className={`text-xs font-bold ${fotos.length + (os.foto_urls?.length || 0) >= MAX_FOTOS ? 'text-amber-700' : 'text-stone-400'}`}>
+            {fotos.length + (os.foto_urls?.length || 0)}/{MAX_FOTOS}
+          </span>
         </div>
       </div>
 

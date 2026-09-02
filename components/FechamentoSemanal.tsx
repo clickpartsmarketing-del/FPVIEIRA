@@ -115,7 +115,9 @@ const FechamentoSemanal: React.FC<Props> = ({ lista }) => {
               <div className="mb-5">
                 <div className="text-[11px] font-bold uppercase text-stone-400 mb-2">Evidências fotográficas</div>
                 <div className="grid grid-cols-3 gap-2">
-                  {os.foto_urls.slice(0, 7).map((u, i) => (
+                  {/* v85: a folha impressa mostra até 12 (cabe na página);
+                      o relatório fotográfico da medição traz todas */}
+                  {os.foto_urls.slice(0, 12).map((u, i) => (
                     <img key={i} src={u} alt={`foto ${i + 1}`} className="w-full h-28 object-cover rounded-lg border border-stone-200" />
                   ))}
                 </div>

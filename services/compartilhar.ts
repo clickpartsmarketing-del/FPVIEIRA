@@ -129,7 +129,9 @@ export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean
 // que vieram (a legenda já diz quantas deveriam ser).
 const buscarFotos = async (urls: string[], ref: string): Promise<File[]> => {
   const files: File[] = [];
-  await Promise.all(urls.slice(0, 10).map(async (u, i) => {
+  // teto de 15 = o mesmo do formulário (v85). Acima disso o WhatsApp
+  // costuma recusar o compartilhamento de uma vez só.
+  await Promise.all(urls.slice(0, 15).map(async (u, i) => {
     try {
       const r = await fetch(u);
       if (!r.ok) return;

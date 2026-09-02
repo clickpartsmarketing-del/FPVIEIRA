@@ -431,7 +431,7 @@ const ChatOS: React.FC<{ aoSalvar: () => void }> = ({ aoSalvar }) => {
     mudarEtapa('foto');
   };
 
-  const MAX_FOTOS = 7;
+  const MAX_FOTOS = 15; // v85: era 7 e o campo batia no teto (mesmo valor do NovaOS)
 
   const anexouFoto = (files: FileList | null) => {
     if (!files || !files.length) return;
