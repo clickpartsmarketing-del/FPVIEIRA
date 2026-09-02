@@ -46,12 +46,15 @@ export const osService = {
     if (os.id) {
       let { error } = await supabase.from('os_campo').update(payload).eq('id', os.id);
       // resiliência: banco sem coluna nova ainda ('area'/'geo'/'local') → tira e salva
-      if (error && /'(area|geo|local)'/i.test(error.message)) {
+      if (error && /'(area|geo|local|contrato)'/i.test(error.message)) {
         const p2: any = { ...payload };
-        delete p2.area; delete p2.geo; delete p2.local;
+        delete p2.area; delete p2.geo; delete p2.local; delete p2.contrato;
         ({ error } = await supabase.from('os_campo').update(p2).eq('id', os.id));
       }
-      return { ok: !error, erro: error?.message };
+      // v86: devolve a O.S. também na EDIÇÃO — sem isso a tela não tinha o
+      // registro atualizado e o painel "mandar pro grupo" só aparecia ao criar
+      // (pedido do Renan: quem corrige precisa poder recompartilhar).
+      return { ok: !error, erro: error?.message, os: error ? undefined : ({ ...os, ...payload } as OSCampo) };
     }
     // PISO ANTI-COLISÃO COM O PAPEL (conciliação 06/07: a contagem manual
     // já chegou a F-87): sem nº oficial e sem ref de equipe, o app gera o
@@ -101,10 +104,10 @@ export const osService = {
       }
     }
 
-    // sem a coluna 'local' (LOCAL-OS.sql pendente) → tira e insere assim mesmo:
-    // a O.S. entra sem o local em vez de o campo perder o registro inteiro
-    if (error && /'local'/i.test(error.message)) {
-      delete base.local;
+    // sem a coluna 'local'/'contrato' (SQL pendente) → tira e insere assim
+    // mesmo: a O.S. entra sem o campo em vez de o registro inteiro se perder
+    if (error && /'(local|contrato)'/i.test(error.message)) {
+      delete base.local; delete base.contrato;
       ({ data, error } = await supabase.from('os_campo').insert([base]).select().single());
     }
 

@@ -42,6 +42,11 @@ export const EQUIPES: Record<string, Equipe> = {
 // Encarregados da CORRETIVA: painel próprio (igual ao emergencial, mas
 // filtrado pelo EXECUTOR) e numeração própria (G01 Gilson / C01 Carlos)
 export interface Corretiva { executor: string; prefixo: string; apelido: string; }
+// Quem atende OS DOIS contratos (Educação FP.094 e Saúde): ganha os botões
+// de contrato no formulário. Emiliano é encarregado geral dos dois; o Gilson
+// também roda nas unidades de saúde (decisão Renan 02/09).
+export const DOIS_CONTRATOS = ['emiliano', 'gilson'];
+
 export const CORRETIVA: Record<string, Corretiva> = {
   gilson: { executor: 'Gilson', prefixo: 'G', apelido: 'Gilson' },
   carlosalberto: { executor: 'Carlos Alberto', prefixo: 'C', apelido: 'Carlos Alberto' },

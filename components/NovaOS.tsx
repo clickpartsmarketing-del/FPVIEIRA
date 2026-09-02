@@ -4,7 +4,7 @@ import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTI
 import { ESCOLAS } from '../data/escolas';
 import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
-import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, medDoMes, hojeLocal } from '../config';
+import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, DOIS_CONTRATOS, medDoMes, hojeLocal } from '../config';
 import { osService } from '../services/osService';
 import { compartilharOS } from '../services/compartilhar';
 
@@ -62,6 +62,9 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   // v78: O.S. recém-salva, p/ oferecer o compartilhamento no grupo
   const [ultimaSalva, setUltimaSalva] = useState<OSCampo | null>(null);
   const [msgShare, setMsgShare] = useState('');
+  // v86: o formulário é limpo logo após salvar, então guardo aqui se foi
+  // EDIÇÃO — o texto do painel muda ("corrigiu… mandar a versão certa?")
+  const [salvaFoiEdicao, setSalvaFoiEdicao] = useState(false);
   const [ouvindo, setOuvindo] = useState(false);
   const recRef = useRef<any>(null);
   const fotoRef = useRef<HTMLInputElement>(null);
@@ -243,8 +246,11 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     setMsg((os.id ? 'O.S. atualizada ✔' : `O.S. ${ref ? ref + ' ' : ''}registrada no banco central ✔`) + (falhas > 0 ? ` (sem ${falhas} foto(s) que falharam)` : '') + msgKit);
     // v78: a O.S. acabou de salvar com a foto no Storage — oferece mandar
     // pro grupo JÁ com a legenda padrão (antes a foto ia solta e ninguém
-    // sabia de qual escola/serviço era)
-    if (salva) setUltimaSalva({ ...salva, foto_urls: urls } as OSCampo);
+    // sabia de qual escola/serviço era).
+    // v86: vale também na EDIÇÃO — quem corrigiu o texto precisa poder mandar
+    // a versão certa pro grupo (caso real: E01 do Emiliano, 02/09).
+    setSalvaFoiEdicao(!!os.id);
+    setUltimaSalva({ ...(salva || dados), foto_urls: urls } as OSCampo);
     try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ }
     setRascunho(null);
     setOs(vaziaPara(usuario));
@@ -320,6 +326,25 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
           placeholder="comece a digitar…"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         <datalist id="escolas">{ESCOLAS.map(e => <option key={e} value={e} />)}</datalist>
+        {/* v86: Emiliano e Gilson atendem OS DOIS contratos. O botão marca a
+            qual a O.S. pertence — sem isso a medição da Educação puxa serviço
+            da Saúde. As unidades de saúde entram na lista num segundo passo
+            (decisão do Renan 02/09: por ora só o marcador). */}
+        {DOIS_CONTRATOS.includes(usuario) && (
+          <div className="flex gap-2 mt-2">
+            {(['Educação', 'Saúde'] as const).map(c => {
+              const ativo = (os.contrato || 'Educação') === c;
+              return (
+                <button key={c} type="button" onClick={() => campo('contrato', c)}
+                  className={`flex-1 text-sm font-bold py-2.5 rounded-xl border transition ${ativo
+                    ? (c === 'Saúde' ? 'bg-sky-600 text-white border-sky-600' : 'bg-fpv-600 text-white border-fpv-600')
+                    : 'bg-white text-stone-500 border-stone-200'}`}>
+                  {c === 'Saúde' ? '🏥' : '🏫'} {c}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* v81: ONDE dentro da unidade — vai na legenda que o campo manda no
@@ -543,7 +568,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       {ultimaSalva && (
         <div className="bg-white border-2 border-fpv-200 rounded-xl p-3 space-y-2">
           <p className="text-[12px] font-bold text-stone-800">
-            Mandar a {refDaOS(ultimaSalva)} pro grupo?
+            {salvaFoiEdicao ? `Corrigiu a ${refDaOS(ultimaSalva)} — mandar a versão certa pro grupo?` : `Mandar a ${refDaOS(ultimaSalva)} pro grupo?`}
             <span className="font-medium text-stone-500"> vai com a legenda padrão{(ultimaSalva.foto_urls?.length || 0) > 0 ? ` e ${ultimaSalva.foto_urls.length} foto(s)` : ''}.</span>
           </p>
           <div className="flex gap-2">

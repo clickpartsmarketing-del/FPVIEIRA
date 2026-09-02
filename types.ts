@@ -7,6 +7,7 @@ export interface OSCampo {
   tipo?: string | null; // Emergencial | Corretiva | Preventiva (spec Renan 06/07)
   unidade: string;
   local?: string | null; // onde DENTRO da unidade: Cozinha, Sala 12, Consultório 03 (v81)
+  contrato?: string | null; // 'Educação' | 'Saúde' — quem atende os dois marca aqui (v86)
   fiscal: string;
   classificacao: string;
   entrada: string | null;
