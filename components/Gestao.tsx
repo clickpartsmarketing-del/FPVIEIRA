@@ -1034,11 +1034,11 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
     const porFiscal: Record<string, number> = {};
     pAssinar.forEach(o => { const f = o.fiscal || '—'; porFiscal[f] = (porFiscal[f] || 0) + 1; });
     devedores.push({
-      key: 'nicolas', nome: 'Nicolas',
+      key: 'assistente', nome: 'Marcio Junior',
       resumo: `colher ${pAssinar.length} assinatura${pAssinar.length > 1 ? 's' : ''} (${Object.entries(porFiscal).map(([f, n]) => `${n} ${f}`).join(', ')})`,
       tone: 'red',
       itens: pAssinar.map(os => ({ os, falta: `assinatura do ${os.fiscal || 'fiscal'}` })),
-      texto: `Nicolas, pra fechar a ${med} faltam as assinaturas: ${pAssinar.map(o => `O.S. ${rotuloOS(o)} (${o.unidade} — ${o.fiscal})`).join('; ')}.`,
+      texto: `Marcio, pra fechar a ${med} faltam as assinaturas: ${pAssinar.map(o => `O.S. ${rotuloOS(o)} (${o.unidade} — ${o.fiscal})`).join('; ')}.`,
     });
   }
   const semNumero = universo.filter(o => !selosDaOS(o).numero);
@@ -1294,7 +1294,9 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
 // =====================================================================
 
 const Gestao: React.FC<Props> = (props) => {
-  if (props.papel === 'nicolas') return <TelaEngenheiro {...props} />;
+  // a Rota de Conferência é do ASSISTENTE de engenharia — era do Nicolas,
+  // passou pro Marcio Junior em 01/09. Papel novo aqui = uma linha só.
+  if (['marcio', 'nicolas'].includes(props.papel)) return <TelaEngenheiro {...props} />;
   if (props.papel === 'edmar') return <TelaMedicao {...props} />;
   return (
     <>

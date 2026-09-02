@@ -95,7 +95,9 @@ const App: React.FC = () => {
   const veAlmox = ALMOX.includes(usuario) || ehGestor;
   // prioridade: Nicolas/Renan (RV000) + Lucas por ser o gestor geral
   // (decisão Renan 07/07)
-  const podePriorizar = ['nicolas', 'renan', 'lucas'].includes(usuario);
+  // prioridade P1-P3: assistente de engenharia + gestão (Marcio entrou no
+  // lugar do Nicolas em 01/09; o nome antigo fica até a conta ser apagada)
+  const podePriorizar = ['marcio', 'nicolas', 'renan', 'lucas'].includes(usuario);
   const equipe = EQUIPES[usuario];
   const corretiva = CORRETIVA[usuario];
   // "responsabilidade do autor do painel": encarregado vê as O.S. em
