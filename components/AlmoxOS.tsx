@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PackageMinus, PackagePlus, Save, Loader2, Trash2, Link2, Undo2, Pencil, Search, TrendingUp, BarChart3, Boxes, Wrench, Inbox, Camera, CheckCircle2, Siren, Construction } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { osService } from '../services/osService';
@@ -668,6 +668,18 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     ...apelidos,
   ]));
 
+  // v87: O.S. em que a equipe DECLAROU material no texto e que ainda não
+  // têm nenhuma saída vinculada — é o buraco que o João apontou (o material
+  // usado na emergência não aparecia no histórico do estoque).
+  const declaradasSemSaida = useMemo(() => {
+    const comSaida = new Set(saidas.map(s => (s.os_ref || '').trim()).filter(Boolean));
+    return (listaOS || [])
+      .filter(o => !o.excluida && o.status !== 'Cancelada'
+        && (o.materiais || '').trim().length > 3
+        && !comSaida.has(refDaOS(o)))
+      .sort((a, b) => (b.id || 0) - (a.id || 0));
+  }, [listaOS, saidas]);
+
   // trava da medição vigente nas saídas (REV002): fora do mês vigente = só gestão
   const mesVigente = hoje().slice(0, 7);
   const travadaSaida = (s: Saida) => !ehGestor && (s.data || '').slice(0, 7) !== mesVigente;
@@ -843,6 +855,44 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       {/* ============ SAÍDA ============ */}
       {sub === 'saida' && (
         <>
+          {/* v87 (pedido do João): a equipe de emergência já escreve o
+              material usado dentro da O.S., mas isso não descia pro balcão —
+              o histórico de saída ficava sem essas peças. Aqui aparecem as
+              O.S. com material DECLARADO e SEM saída lançada; um toque
+              preenche o formulário abaixo. Não lanço automático de
+              propósito: quantidade e item precisam do olho do João, senão
+              o estoque baixa errado. */}
+          {declaradasSemSaida.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-3">
+              <h3 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                <PackageMinus size={16} /> Material que a equipe declarou e ainda não saiu do estoque
+                <span className="font-medium text-amber-700">({declaradasSemSaida.length} O.S.)</span>
+              </h3>
+              <p className="text-[11px] text-amber-800 mt-1 mb-2">
+                Toque na O.S. para preencher a saída com esse texto — confira item e quantidade antes de salvar.
+              </p>
+              <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                {declaradasSemSaida.slice(0, 25).map(o => (
+                  <button key={o.id} type="button"
+                    onClick={() => {
+                      setSaida(p => ({ ...p, os_ref: refDaOS(o), escola: o.unidade, obs: `declarado na O.S.: ${(o.materiais || '').trim()}` }));
+                      setMsg(`Saída pré-preenchida pela O.S. ${refDaOS(o)} — digite o item e a quantidade.`);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="w-full text-left bg-white border border-amber-100 rounded-xl px-3 py-2">
+                    <div className="text-[12px] font-bold text-stone-800">
+                      O.S. {refDaOS(o)} · {o.unidade}
+                      <span className="font-medium text-stone-400"> · {o.executor || 'sem executor'}</span>
+                    </div>
+                    <div className="text-[11px] text-stone-600">{(o.materiais || '').replace(/\s+/g, ' ').trim()}</div>
+                  </button>
+                ))}
+                {declaradasSemSaida.length > 25 && (
+                  <p className="text-[11px] text-amber-700">… e outras {declaradasSemSaida.length - 25}. As mais recentes vêm primeiro.</p>
+                )}
+              </div>
+            </div>
+          )}
           <form onSubmit={salvarSaida} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
             <h2 className="font-bold text-stone-900 flex items-center gap-2"><PackageMinus size={18} className="text-fpv-600" /> Saída de material / ferramenta</h2>
             <div className="grid grid-cols-2 gap-3">

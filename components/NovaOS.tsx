@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Save, Mic, Camera, X, Loader2, Eraser, Siren, PackageMinus, Plus, Minus } from 'lucide-react';
 import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS, TIPO_OPTIONS, refDaOS } from '../types';
 import { ESCOLAS } from '../data/escolas';
+import { UNIDADES_SAUDE, LOCAIS_SAUDE } from '../data/unidadesSaude';
 import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
 import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, DOIS_CONTRATOS, medDoMes, hojeLocal } from '../config';
@@ -65,6 +66,9 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   // v86: o formulário é limpo logo após salvar, então guardo aqui se foi
   // EDIÇÃO — o texto do painel muda ("corrigiu… mandar a versão certa?")
   const [salvaFoiEdicao, setSalvaFoiEdicao] = useState(false);
+  const [compartilhando, setCompartilhando] = useState(false); // v87: anti duplo-toque no share
+  // v87: contrato escolhido decide a lista de unidades e de locais
+  const ehSaude = (os.contrato || '') === 'Saúde';
   const [ouvindo, setOuvindo] = useState(false);
   const recRef = useRef<any>(null);
   const fotoRef = useRef<HTMLInputElement>(null);
@@ -321,11 +325,15 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       </div>
 
       <div>
-        <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Unidade (escola)</label>
+        <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">
+          {ehSaude ? 'Unidade (saúde)' : 'Unidade (escola)'}
+        </label>
         <input list="escolas" value={os.unidade} onChange={e => campo('unidade', e.target.value)} required
           placeholder="comece a digitar…"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
-        <datalist id="escolas">{ESCOLAS.map(e => <option key={e} value={e} />)}</datalist>
+        {/* v87: a digitação rápida segue o contrato escolhido — 68 escolas
+            na Educação, 38 unidades da SEMUSA na Saúde */}
+        <datalist id="escolas">{(ehSaude ? UNIDADES_SAUDE : ESCOLAS).map(e => <option key={e} value={e} />)}</datalist>
         {/* v86: Emiliano e Gilson atendem OS DOIS contratos. O botão marca a
             qual a O.S. pertence — sem isso a medição da Educação puxa serviço
             da Saúde. As unidades de saúde entram na lista num segundo passo
@@ -358,10 +366,10 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
           placeholder="ex.: Cozinha · Sala 12 · Banheiro dos alunos"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         <datalist id="locais">
-          {['Cozinha', 'Refeitório', 'Banheiro dos alunos', 'Banheiro dos professores', 'Secretaria',
-            'Direção', 'Sala de aula', 'Pátio', 'Quadra', 'Corredor', 'Recepção', 'Almoxarifado',
+          {(ehSaude ? LOCAIS_SAUDE : ['Cozinha', 'Refeitório', 'Banheiro dos alunos', 'Banheiro dos professores',
+            'Secretaria', 'Direção', 'Sala de aula', 'Pátio', 'Quadra', 'Corredor', 'Recepção', 'Almoxarifado',
             'Depósito', 'Despensa', 'Berçário', 'Biblioteca', 'Sala de recursos', 'Vestiário',
-            'Telhado', 'Caixa d\'água', 'Portão de entrada', 'Área externa'].map(l => <option key={l} value={l} />)}
+            'Telhado', 'Caixa d\'água', 'Portão de entrada', 'Área externa']).map(l => <option key={l} value={l} />)}
         </datalist>
       </div>
 
@@ -572,17 +580,25 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
             <span className="font-medium text-stone-500"> vai com a legenda padrão{(ultimaSalva.foto_urls?.length || 0) > 0 ? ` e ${ultimaSalva.foto_urls.length} foto(s)` : ''}.</span>
           </p>
           <div className="flex gap-2">
-            <button type="button" onClick={async () => {
-              setMsgShare('preparando…');
-              const r = await compartilharOS(ultimaSalva, medDoMes());
+            {/* v87: TRAVA o botão enquanto prepara — o Renato clicou várias
+                vezes achando que travou, e cada clique baixava as fotos de
+                novo. Agora mostra o progresso foto a foto. */}
+            <button type="button" disabled={compartilhando} onClick={async () => {
+              setCompartilhando(true);
+              const n = ultimaSalva.foto_urls?.length || 0;
+              setMsgShare(n > 3 ? `preparando ${n} fotos… pode levar alguns segundos no sinal da escola` : 'preparando…');
+              const r = await compartilharOS(ultimaSalva, medDoMes(), {
+                aoProgredir: (feitas, total) => setMsgShare(`preparando fotos… ${feitas}/${total}`),
+              });
+              setCompartilhando(false);
               setMsgShare(
                 r === 'compartilhado' ? '✔ enviado' :
                 r === 'copiado' ? '📋 legenda copiada — cole no grupo e anexe as fotos' :
                 r === 'cancelado' ? '' : 'não deu pra compartilhar neste aparelho'
               );
               if (r === 'compartilhado') setTimeout(() => { setUltimaSalva(null); setMsgShare(''); }, 1200);
-            }} className="flex-1 bg-fpv-600 active:bg-fpv-700 text-white font-bold py-2.5 rounded-xl text-sm">
-              📤 Compartilhar no grupo
+            }} className="flex-1 bg-fpv-600 active:bg-fpv-700 disabled:bg-stone-300 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
+              {compartilhando ? <><Loader2 size={15} className="animate-spin" /> preparando…</> : '📤 Compartilhar no grupo'}
             </button>
             <button type="button" onClick={() => { setUltimaSalva(null); setMsgShare(''); }}
               className="px-4 border border-stone-300 rounded-xl text-sm font-bold text-stone-600">agora não</button>

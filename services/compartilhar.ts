@@ -127,18 +127,30 @@ export const legendaOS = (os: OSCampo, med?: string, opts: { detalhado?: boolean
 // baixa as fotos do Storage e devolve como File[] pro share nativo.
 // Falha de rede em uma foto não derruba o compartilhamento: manda as
 // que vieram (a legenda já diz quantas deveriam ser).
-const buscarFotos = async (urls: string[], ref: string): Promise<File[]> => {
+// v87: baixar 15 fotos no 4G da escola leva tempo REAL e antes não havia
+// nenhum sinal na tela — o Renato achou que travou e clicou várias vezes,
+// cada clique disparando um novo lote de downloads. Agora reporta progresso
+// e cada foto tem prazo próprio: a que não vier em 20s fica de fora em vez
+// de segurar o compartilhamento inteiro.
+const buscarFotos = async (
+  urls: string[], ref: string,
+  aoProgredir?: (feitas: number, total: number) => void,
+): Promise<File[]> => {
+  const alvo = urls.slice(0, 15); // teto igual ao do formulário (v85)
   const files: File[] = [];
-  // teto de 15 = o mesmo do formulário (v85). Acima disso o WhatsApp
-  // costuma recusar o compartilhamento de uma vez só.
-  await Promise.all(urls.slice(0, 15).map(async (u, i) => {
+  let feitas = 0;
+  await Promise.all(alvo.map(async (u, i) => {
     try {
-      const r = await fetch(u);
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 20000);
+      const r = await fetch(u, { signal: ctl.signal });
+      clearTimeout(t);
       if (!r.ok) return;
       const b = await r.blob();
       const ext = (b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
       files.push(new File([b], `OS_${ref}_${i + 1}.${ext}`, { type: b.type || 'image/jpeg' }));
     } catch { /* foto que não veio fica de fora */ }
+    finally { feitas++; aoProgredir?.(feitas, alvo.length); }
   }));
   return files;
 };
@@ -147,7 +159,10 @@ export type ResultadoShare = 'compartilhado' | 'copiado' | 'cancelado' | 'erro';
 
 // Compartilha no grupo: no celular abre a folha nativa (WhatsApp, e-mail…)
 // com legenda + fotos; no desktop copia a legenda pra área de transferência.
-export const compartilharOS = async (os: OSCampo, med?: string, opts: { detalhado?: boolean } = {}): Promise<ResultadoShare> => {
+export const compartilharOS = async (
+  os: OSCampo, med?: string,
+  opts: { detalhado?: boolean; aoProgredir?: (feitas: number, total: number) => void } = {},
+): Promise<ResultadoShare> => {
   const texto = legendaOS(os, med, opts);
   const urls = os.foto_urls || [];
   const nav = navigator as any;
@@ -155,7 +170,7 @@ export const compartilharOS = async (os: OSCampo, med?: string, opts: { detalhad
   // 1) share nativo COM fotos (celular) — é o caminho que resolve a dor
   if (nav.share && urls.length > 0) {
     try {
-      const files = await buscarFotos(urls, refDaOS(os));
+      const files = await buscarFotos(urls, refDaOS(os), opts.aoProgredir);
       if (files.length && nav.canShare?.({ files })) {
         await nav.share({ text: texto, files });
         return 'compartilhado';
