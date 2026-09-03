@@ -229,8 +229,12 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     const dados = { ...os, materiais, foto_urls: urls, numero: os.numero ? Number(os.numero) : null, ...(geo ? { geo } : {}) };
     // sem nº oficial → numeração automática da equipe/encarregado
     // (L/M emergência · G/C corretiva), gerada no banco
-    const resultado = prefixoRef
-      ? await osService.salvarEquipe(dados, prefixoRef)
+    // v88: na SAÚDE a fictícia leva a inicial da pessoa + S (QS01, NS01,
+    // MS01…) — a mesma leitura da Educação, mas dá pra ver o contrato só
+    // de bater o olho na referência, sem abrir a O.S.
+    const prefixoUsado = prefixoRef ? (ehSaude ? `${prefixoRef}S` : prefixoRef) : undefined;
+    const resultado = prefixoUsado
+      ? await osService.salvarEquipe(dados, prefixoUsado)
       : await osService.salvar(dados);
     setSalvando(false);
     if (!resultado.ok) { setMsg('Erro ao salvar: ' + (resultado.erro || 'verifique a conexão')); return; }
@@ -343,7 +347,16 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
             {(['Educação', 'Saúde'] as const).map(c => {
               const ativo = (os.contrato || 'Educação') === c;
               return (
-                <button key={c} type="button" onClick={() => campo('contrato', c)}
+                <button key={c} type="button" onClick={() => {
+                  // v88 (regra do Renan 03/09): SAÚDE é sempre emergencial —
+                  // o contrato da Saúde só tem esse fluxo hoje. Marcar o botão
+                  // já deixa a O.S. pronta; quem quiser muda depois.
+                  if (c === 'Saúde') {
+                    setOs(prev => ({ ...prev, contrato: c, emergencial: true, tipo: 'Emergencial', classificacao: 'Emergencial', fiscal: 'SEMUSA', unidade: '', local: '' }));
+                  } else {
+                    setOs(prev => ({ ...prev, contrato: c, fiscal: equipe?.fiscal ?? 'Wellington', unidade: '', local: '' }));
+                  }
+                }}
                   className={`flex-1 text-sm font-bold py-2.5 rounded-xl border transition ${ativo
                     ? (c === 'Saúde' ? 'bg-sky-600 text-white border-sky-600' : 'bg-fpv-600 text-white border-fpv-600')
                     : 'bg-white text-stone-500 border-stone-200'}`}>

@@ -56,7 +56,7 @@ export const CLASSIF_OPTIONS = ['Emergencial', 'Urgente', 'Normal'];
 // mora só no banco (os_campo.executor guarda o nome como texto; a busca
 // retroativa consulta os registros, não as opções). Miqueias saiu 07/07;
 // Nicolas saiu 01/09 (as O.S. que ele executou seguem com o nome no banco).
-export const EXECUTOR_OPTIONS = ['Gilson', 'Leandro', 'Carlos Alberto', 'Renato', 'Patrick', 'Edison', 'Emiliano', 'Matheus', 'Geilton', 'Marcio Junior', 'Serviço Externo'];
+export const EXECUTOR_OPTIONS = ['Gilson', 'Leandro', 'Carlos Alberto', 'Renato', 'Patrick', 'Edison', 'Emiliano', 'Matheus', 'Geilton', 'Marcio Junior', 'Queiroz', 'Neilson', 'Miqueias', 'Andre', 'Caleb', 'Serviço Externo'];
 // só a medição vigente por decisão do Renan (05/07) — valores antigos
 // (MED 7 etc.) continuam visíveis ao editar O.S. que já os têm
 // medições futuras abertas p/ despacho (Renan 21/07: O.S. recusada pelo

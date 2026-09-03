@@ -43,9 +43,16 @@ export const EQUIPES: Record<string, Equipe> = {
 // filtrado pelo EXECUTOR) e numeração própria (G01 Gilson / C01 Carlos)
 export interface Corretiva { executor: string; prefixo: string; apelido: string; }
 // Quem atende OS DOIS contratos (Educação FP.094 e Saúde): ganha os botões
-// de contrato no formulário. Emiliano é encarregado geral dos dois; o Gilson
-// também roda nas unidades de saúde (decisão Renan 02/09).
-export const DOIS_CONTRATOS = ['emiliano', 'gilson'];
+// de contrato no formulário.
+// CORREÇÃO Renan 03/09: era só Emiliano e Gilson, mas o Renato (emergencia2)
+// e o Caleb já atendiam emergência da saúde e ficavam sem o botão. Agora é
+// o PADRÃO de todo login que registra O.S. — quem só faz Educação nunca
+// toca no botão e nada muda pra ele.
+export const DOIS_CONTRATOS = [
+  'emergencia1', 'emergencia2',                    // equipes Leandro e Renato
+  'gilson', 'carlosalberto', 'emiliano',           // corretiva
+  'queiroz', 'neilson', 'miqueias', 'andre',       // entraram 03/09
+];
 
 export const CORRETIVA: Record<string, Corretiva> = {
   gilson: { executor: 'Gilson', prefixo: 'G', apelido: 'Gilson' },
@@ -54,6 +61,13 @@ export const CORRETIVA: Record<string, Corretiva> = {
   // frente do Carlos Alberto. O login do Carlos CONTINUA ativo — decisão do
   // Renan: ainda precisamos coletar as informações que estão com ele.
   emiliano: { executor: 'Emiliano', prefixo: 'E', apelido: 'Emiliano' },
+  // Entraram em 03/09. Q, N e A estavam livres; o M VOLTA a ser do Miqueias
+  // (era dele antes de 07/07 e a equipe do Renato o herdou por engano até a
+  // v83) — a numeração dele continua de M88, sem colidir com as 87 antigas.
+  queiroz: { executor: 'Queiroz', prefixo: 'Q', apelido: 'Queiroz' },
+  neilson: { executor: 'Neilson', prefixo: 'N', apelido: 'Neilson' },
+  miqueias: { executor: 'Miqueias', prefixo: 'M', apelido: 'Miqueias' },
+  andre: { executor: 'Andre', prefixo: 'A', apelido: 'André' },
 };
 
 // LOGIN EM 2 TOQUES (pedido Renan 07/07: "muita recusa" ao digitar o
@@ -66,6 +80,11 @@ export const ACESSOS: Acesso[] = [
   { rotulo: 'Gilson', email: 'gilson@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'Carlos Alberto', email: 'carlosalberto@fpv.app', dica: 'corretiva', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'Emiliano', email: 'emiliano@fpv.app', dica: 'encarregado geral', emoji: '🔧', grupo: 'campo' },
+  // entraram 03/09 — atendem Educação e Saúde (o botão de contrato decide)
+  { rotulo: 'Queiroz', email: 'queiroz@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
+  { rotulo: 'Neilson', email: 'neilson@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
+  { rotulo: 'Miqueias', email: 'miqueias@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
+  { rotulo: 'André', email: 'andre@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'João', email: 'joao@fpv.app', dica: 'almoxarifado', emoji: '📦', grupo: 'campo' },
   // Nicolas saiu da operação (01/09) — conta bloqueada e fora das listas;
   // o histórico dele continua no banco (regra dura nº 11). Marcio Junior
