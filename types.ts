@@ -50,7 +50,9 @@ export const TIPO_OPTIONS = ['Emergencial', 'Corretiva', 'Preventiva'];
 // 'Avaliando' entrou pelo RV000 do engenheiro (funil: pendente →
 // executando → assinatura → avaliando → concluída)
 export const STATUS_OPTIONS = ['Pendente', 'Executando', 'Assinatura', 'Avaliando', 'Concluído', 'Material', 'Cancelada'];
-export const FISCAL_OPTIONS = ['Wellington', 'Renato', 'Central'];
+// Educação: Wellington, Renato, Central · Saúde (03/09): Fernando (postos),
+// Elisangela (SEMUSA), Cunha (hospital, UPA, CAPS, centros e o restante)
+export const FISCAL_OPTIONS = ['Wellington', 'Renato', 'Central', 'Fernando', 'Elisangela', 'Cunha'];
 export const CLASSIF_OPTIONS = ['Emergencial', 'Urgente', 'Normal'];
 // REGRA (Renan 07/07): quem sai da operação SAI desta lista — o histórico
 // mora só no banco (os_campo.executor guarda o nome como texto; a busca

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Save, Mic, Camera, X, Loader2, Eraser, Siren, PackageMinus, Plus, Minus } from 'lucide-react';
 import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS, TIPO_OPTIONS, refDaOS } from '../types';
 import { ESCOLAS } from '../data/escolas';
-import { UNIDADES_SAUDE, LOCAIS_SAUDE } from '../data/unidadesSaude';
+import { UNIDADES_SAUDE, LOCAIS_SAUDE, fiscalDaUnidadeSaude } from '../data/unidadesSaude';
 import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
 import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, DOIS_CONTRATOS, medDoMes, hojeLocal } from '../config';
@@ -332,7 +332,15 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
         <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">
           {ehSaude ? 'Unidade (saúde)' : 'Unidade (escola)'}
         </label>
-        <input list="escolas" value={os.unidade} onChange={e => campo('unidade', e.target.value)} required
+        {/* v89: na SAÚDE o fiscal vem da própria unidade (regra Renan 03/09):
+            posto → Fernando · SEMUSA → Elisangela · resto → Cunha. Na
+            Educação o fiscal continua vindo da zona do login. */}
+        <input list="escolas" value={os.unidade} required
+          onChange={e => {
+            const v = e.target.value;
+            if (ehSaude) setOs(prev => ({ ...prev, unidade: v, fiscal: fiscalDaUnidadeSaude(v) }));
+            else campo('unidade', v);
+          }}
           placeholder="comece a digitar…"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 outline-none focus:border-fpv-500" />
         {/* v87: a digitação rápida segue o contrato escolhido — 68 escolas
@@ -352,7 +360,9 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
                   // o contrato da Saúde só tem esse fluxo hoje. Marcar o botão
                   // já deixa a O.S. pronta; quem quiser muda depois.
                   if (c === 'Saúde') {
-                    setOs(prev => ({ ...prev, contrato: c, emergencial: true, tipo: 'Emergencial', classificacao: 'Emergencial', fiscal: 'SEMUSA', unidade: '', local: '' }));
+                    // fiscal fica no padrão Cunha e se ajusta sozinho quando a
+                    // unidade for digitada (posto → Fernando, SEMUSA → Elisangela)
+                    setOs(prev => ({ ...prev, contrato: c, emergencial: true, tipo: 'Emergencial', classificacao: 'Emergencial', fiscal: 'Cunha', unidade: '', local: '' }));
                   } else {
                     setOs(prev => ({ ...prev, contrato: c, fiscal: equipe?.fiscal ?? 'Wellington', unidade: '', local: '' }));
                   }

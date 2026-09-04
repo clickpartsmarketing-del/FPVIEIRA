@@ -59,6 +59,22 @@ export const UNIDADES_SAUDE = [
   'Casa da Criança',
 ];
 
+// FISCAIS DA SEMUSA por unidade (regra do Renan 03/09):
+//   · postos de saúde (ESF / UBS / Clínica da Família) → FERNANDO
+//   · SEMUSA sede                                       → ELISANGELA
+//   · todo o restante (hospital, UPA, PS, CAPS, centros,
+//     residências, administrativas, locais fora do anexo) → CUNHA
+// Mesma ideia da zona por fiscal da Educação: a equipe digita a unidade e
+// o fiscal já vem preenchido, sem depender de decorar quem é de quem.
+export const fiscalDaUnidadeSaude = (unidade: string): string => {
+  const u = (unidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (!u.trim()) return 'Cunha';
+  if (/\bsemusa\b/.test(u)) return 'Elisangela';
+  // posto = ESF, UBS ou Clínica da Família (as três formas que a rede usa)
+  if (/\besf\b|\bubs\b|clinica da familia|\bposto\b/.test(u)) return 'Fernando';
+  return 'Cunha';
+};
+
 // locais DENTRO da unidade de saúde (o "Local" da legenda) — a sala de
 // vacina não existe em escola, e a sala de aula não existe em posto
 export const LOCAIS_SAUDE = [
