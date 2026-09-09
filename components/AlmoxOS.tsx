@@ -109,6 +109,13 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   const [mostrar, setMostrar] = useState(30);
   const [faltaSQL, setFaltaSQL] = useState(false);
   const [ferrAberta, setFerrAberta] = useState<number | null>(null); // ficha da ferramenta
+  // v90 (Renan 09/09): a entrada de compra só tinha INSERT — nunca aparecia
+  // em tela e não dava para corrigir. Marcio e João erraram no cadastro do
+  // estoque e ficaram com o erro somando saldo para sempre. Agora a entrada
+  // é listada e editável, com formulário inline (nada de prompt: eles estão
+  // no celular, e uma sequência de 6 prompts no telefone é inviável).
+  const [entradaEdit, setEntradaEdit] = useState<Entrada | null>(null);
+  const [verEntradas, setVerEntradas] = useState(false);
   const [apelidos, setApelidos] = useState<string[]>([]); // autopreenchimento acumulativo (REV002)
   const [mesFiltro, setMesFiltro] = useState('TODOS'); // histórico por mês (REV002)
   // contagem: Nicolas/Renan (REV001) + Lucas por ser o gestor geral
@@ -393,6 +400,40 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     if (error) { setMsg(/entrada_material/.test(error.message) ? '⚠️ Rode o ALMOX-V2.sql no Supabase primeiro.' : 'Erro: ' + error.message); return; }
     setMsg(`✅ Entrada: ${entrada.quantidade} ${entrada.unidade} ${entrada.descricao}${nf_url ? ' 🧾 NF anexada' : (nfFoto ? ' ⚠️ NF falhou no envio' : '')}`);
     setEntrada({ ...ENTRADA_VAZIA }); setNfFoto(null); carregar();
+  };
+
+  // v90: corrigir uma entrada já lançada. O saldo é contagem + entradas −
+  // saídas, então uma quantidade errada aqui distorce o estoque inteiro até
+  // alguém arrumar — por isso editar é obrigatório, não conveniência.
+  const salvarEdicaoEntrada = async () => {
+    if (!entradaEdit || !entradaEdit.id) return;
+    const q = Number(entradaEdit.quantidade);
+    if (!entradaEdit.descricao.trim()) { setMsg('Informe o material.'); return; }
+    if (isNaN(q) || q < 0) { setMsg('Quantidade inválida.'); return; }
+    setSalvando(true);
+    const { error } = await supabase.from('entrada_material').update({
+      data: entradaEdit.data, descricao: entradaEdit.descricao.trim(), quantidade: q,
+      unidade: entradaEdit.unidade, origem: entradaEdit.origem, obs: entradaEdit.obs || null,
+    }).eq('id', entradaEdit.id);
+    setSalvando(false);
+    if (error) { setMsg('Erro: ' + error.message); return; }
+    setMsg(`✏️ Entrada corrigida: ${q} ${entradaEdit.unidade} ${entradaEdit.descricao.trim()}.`);
+    setEntradaEdit(null); carregar();
+  };
+  const apagarEntrada = async (en: Entrada) => {
+    if (!en.id) return;
+    if (!confirm(`Apagar a entrada de ${en.quantidade} ${en.unidade} "${en.descricao}" (${en.data})?\n\nO saldo do estoque cai ${en.quantidade} ${en.unidade}.\nUse só para lançamento ERRADO ou de teste.`)) return;
+    const { error } = await supabase.from('entrada_material').delete().eq('id', en.id);
+    if (error) {
+      // a política de DELETE do ALMOX-V2.sql lista e-mails nominais — quem
+      // não está nela recebe 0 linhas afetadas em vez de erro explícito
+      setMsg(/permission|policy|row-level/i.test(error.message)
+        ? '⛔ Seu login não tem permissão para apagar entrada. Peça ao João ou à gestão.'
+        : 'Erro: ' + error.message);
+      return;
+    }
+    setMsg(`🗑 Entrada de ${en.quantidade} ${en.unidade} ${en.descricao} apagada.`);
+    setEntradaEdit(null); carregar();
   };
 
   const criarFerramenta = async () => {
@@ -1002,6 +1043,63 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
               {salvando ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Registrar entrada
             </button>
           </form>
+
+          {/* ===== v90: ENTRADAS LANÇADAS — ver e corrigir =====
+              Antes daqui a entrada era cega: entrava no saldo e sumia da
+              tela. Erro de digitação ficava somando para sempre. */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+            <button onClick={() => setVerEntradas(v => !v)} className="w-full flex items-center justify-between text-left">
+              <h2 className="font-bold text-stone-900 text-sm">Entradas lançadas ({entradas.length})</h2>
+              <span className="text-[11px] font-bold text-fpv-700">{verEntradas ? 'ocultar' : 'ver e corrigir'}</span>
+            </button>
+            {verEntradas && (
+              <div className="mt-3 space-y-1.5">
+                {entradas.length === 0 && <p className="text-sm text-stone-400 text-center py-4">Nenhuma entrada registrada ainda.</p>}
+                {[...entradas]
+                  .sort((a, b) => String(b.data).localeCompare(String(a.data)) || Number(b.id || 0) - Number(a.id || 0))
+                  .slice(0, 40)
+                  .map(en => {
+                    const editando = entradaEdit?.id === en.id;
+                    if (!editando) return (
+                      <div key={en.id} className="flex items-center gap-2 text-sm border-b border-stone-50 py-1.5">
+                        <span className="text-[10px] text-stone-400 tabular-nums shrink-0">{String(en.data).slice(8, 10)}/{String(en.data).slice(5, 7)}</span>
+                        <span className="flex-1 min-w-0 truncate text-stone-700">{en.descricao}</span>
+                        <b className="tabular-nums text-stone-900 shrink-0">{en.quantidade} {en.unidade}</b>
+                        {en.nf_url && <a href={en.nf_url} target="_blank" rel="noreferrer" title="nota fiscal" className="shrink-0">🧾</a>}
+                        <button onClick={() => setEntradaEdit({ ...en })} title="Corrigir esta entrada"
+                          className="p-1 text-stone-300 hover:text-fpv-600 shrink-0"><Pencil size={13} /></button>
+                      </div>
+                    );
+                    return (
+                      <div key={en.id} className="border border-fpv-200 bg-fpv-50/40 rounded-xl p-3 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="date" value={entradaEdit!.data} onChange={e => setEntradaEdit(p => ({ ...p!, data: e.target.value }))} className={inputCls} />
+                          <input value={entradaEdit!.origem} onChange={e => setEntradaEdit(p => ({ ...p!, origem: e.target.value }))} placeholder="origem/fornecedor" className={inputCls} />
+                        </div>
+                        <input list="materiais" value={entradaEdit!.descricao} onChange={e => setEntradaEdit(p => ({ ...p!, descricao: e.target.value }))} placeholder="material" className={inputCls} />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="number" step="0.01" min="0" value={entradaEdit!.quantidade}
+                            onChange={e => setEntradaEdit(p => ({ ...p!, quantidade: parseFloat(e.target.value) || 0 }))} className={inputCls} />
+                          <select value={entradaEdit!.unidade} onChange={e => setEntradaEdit(p => ({ ...p!, unidade: e.target.value }))} className={inputCls}>
+                            {UNIDADES.map(u => <option key={u}>{u}</option>)}
+                          </select>
+                        </div>
+                        <input value={entradaEdit!.obs || ''} onChange={e => setEntradaEdit(p => ({ ...p!, obs: e.target.value }))} placeholder="observação / nº da NF" className={inputCls} />
+                        <div className="flex gap-2">
+                          <button onClick={salvarEdicaoEntrada} disabled={salvando}
+                            className="flex-1 bg-fpv-500 hover:bg-fpv-600 text-white font-bold py-2.5 rounded-xl text-sm">Salvar correção</button>
+                          <button onClick={() => setEntradaEdit(null)}
+                            className="px-4 border border-stone-200 text-stone-600 font-bold py-2.5 rounded-xl text-sm">Cancelar</button>
+                          <button onClick={() => apagarEntrada(en)} title="Apagar lançamento errado/de teste"
+                            className="px-3 border border-red-200 text-red-600 font-bold py-2.5 rounded-xl"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {entradas.length > 40 && <p className="text-[11px] text-stone-400 text-center pt-1">mostrando as 40 mais recentes de {entradas.length}</p>}
+              </div>
+            )}
+          </div>
         </>
       )}
 
