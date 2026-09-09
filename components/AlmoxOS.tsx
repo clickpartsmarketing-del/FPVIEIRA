@@ -5,6 +5,7 @@ import { osService } from '../services/osService';
 import { OSCampo, refDaOS, EXECUTOR_OPTIONS, buscaNorm } from '../types';
 import { MATERIAIS, UNIDADES, ORIGENS, MINIMO_PADRAO_PCT } from '../data/materiais';
 import { ESCOLAS, fiscalDaEscola } from '../data/escolas';
+import { UNIDADES_SAUDE, contratoDaUnidade } from '../data/unidadesSaude';
 import { hojeLocal } from '../config';
 
 // =============================================================
@@ -17,6 +18,7 @@ interface Saida {
   id?: number; data: string; descricao: string; quantidade: number; unidade: string;
   os_ref: string; escola: string; origem: string; obs?: string | null;
   destinatario?: string | null; recebido?: boolean | null; criado_em?: string;
+  contrato?: string | null; // v91: Educação | Saúde — deduzido da unidade
 }
 interface ItemEstoque {
   id?: number; descricao: string; categoria: string; unidade: string;
@@ -324,10 +326,21 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       payload.escola = osVinc.unidade;
     }
     if (obsExtra) payload.obs = [(payload.obs || '').trim(), obsExtra].filter(Boolean).join(' ');
+    // v91 (Renan 09/09): o João é um só e atende os dois contratos. O
+    // contrato sai da UNIDADE de destino, não de uma escolha dele — assim
+    // o consumo da Educação e o da Saúde nascem separados sem depender de
+    // ninguém lembrar de marcar. O campo é editável na tela para o caso
+    // ambíguo (Prefeitura, Casa da Criança, Galpão Recanto).
+    payload.contrato = (saida as any).contrato || contratoDaUnidade(payload.escola || '');
     let { error } = await supabase.from('saida_material').insert([payload]);
-    // banco sem as colunas novas (ALMOX-V2.sql pendente) → salva sem elas
+    // banco sem as colunas novas (ALMOX-V2.sql / CONTRATO-SAIDA.sql pendente)
+    // → salva sem elas em vez de perder a saída
+    if (error && /contrato/i.test(error.message)) {
+      delete payload.contrato;
+      ({ error } = await supabase.from('saida_material').insert([payload]));
+    }
     if (error && /obs|destinatario|recebido/i.test(error.message)) {
-      delete payload.obs; delete payload.destinatario; delete payload.recebido;
+      delete payload.obs; delete payload.destinatario; delete payload.recebido; delete payload.contrato;
       ({ error } = await supabase.from('saida_material').insert([payload]));
     }
     setSalvando(false);
@@ -373,6 +386,17 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     carregar();
   };
 
+  // v91: item JÁ CADASTRADO com o nome digitado. Antes daqui o Cadastro
+  // salvava por cima em silêncio (insert → on duplicate → update com o
+  // payload inteiro): digitar um item existente e salvar ZERAVA a contagem
+  // dele com o 0 padrão do formulário, sem avisar ninguém. Agora a tela
+  // reconhece e assume que é edição.
+  const itemExistente = useMemo(() => {
+    const d = norm(item.descricao || '');
+    if (!d) return null;
+    return itens.find(i => norm(i.descricao) === d) || null;
+  }, [item.descricao, itens]);
+
   const salvarItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!item.descricao.trim()) { setMsg('Informe o material/ferramenta.'); return; }
@@ -384,8 +408,21 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     }
     setSalvando(false);
     if (error) { setMsg(/estoque_item/.test(error.message) ? '⚠️ Rode o ALMOX-V2.sql no Supabase primeiro.' : 'Erro: ' + error.message); return; }
-    setMsg(`✅ ${item.descricao} no catálogo (mín. ${item.qtd_minima} ${item.unidade}).`);
+    setMsg(itemExistente
+      ? `✏️ ${item.descricao} atualizado (contagem ${item.saldo_inicial} · mín. ${item.qtd_minima} ${item.unidade}).`
+      : `✅ ${item.descricao} no catálogo (mín. ${item.qtd_minima} ${item.unidade}).`);
     setItem({ ...ITEM_VAZIO }); carregar();
+  };
+  // puxa os valores atuais do item para o formulário — sem isso o João
+  // "edita" contra um formulário em branco e grava zero por engano
+  const puxarExistente = () => {
+    if (!itemExistente) return;
+    setItem({
+      descricao: itemExistente.descricao, categoria: itemExistente.categoria,
+      unidade: itemExistente.unidade, qtd_minima: itemExistente.qtd_minima,
+      saldo_inicial: itemExistente.saldo_inicial,
+    } as ItemEstoque);
+    setMsg(`Valores atuais de ${itemExistente.descricao} carregados — corrija e salve.`);
   };
 
   const salvarEntrada = async (e: React.FormEvent) => {
@@ -956,7 +993,11 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
             </div>
             <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1"><Link2 size={11} className="inline mr-1" />O.S. vinculada (o coração do cruzamento)</label>
               <input list="refs-os" value={saida.os_ref} onChange={e => escolheuOS(e.target.value)} placeholder="nº oficial, L/M-nº ou F-nn — escolher puxa a escola" className="w-full border-2 border-fpv-100 rounded-lg px-3 py-2.5 text-sm bg-fpv-50/40 outline-none focus:border-fpv-500" />
-              <datalist id="refs-os">{refsOS.map(r => <option key={r.rotulo} value={r.ref}>{r.rotulo}</option>)}</datalist>
+              {/* chave pelo índice: o rótulo NÃO é único — o nº 1218 existe
+                  duas vezes no banco (cicatriz histórica, a mesma que o
+                  import da fiscalização apontou), e usá-lo como key enchia
+                  o console de aviso do React e escondia erro de verdade */}
+              <datalist id="refs-os">{refsOS.map((r, ix) => <option key={`${r.ref}-${ix}`} value={r.ref}>{r.rotulo}</option>)}</datalist>
               {!(saida.os_ref || '').trim() && (
                 <label className={`mt-2 flex items-center gap-2 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer border ${gerarOS ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-700 border-red-200'}`}>
                   <input type="checkbox" checked={gerarOS} onChange={e => setGerarOS(e.target.checked)} className="hidden" />
@@ -964,14 +1005,45 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                 </label>
               )}</div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Escola / destino</label>
-                <input list="escolas-almox" value={saida.escola} onChange={e => setSaida(p => ({ ...p, escola: e.target.value }))} className={inputCls} />
-                <datalist id="escolas-almox">{ESCOLAS.map(e2 => <option key={e2} value={e2} />)}</datalist></div>
+              {/* v91: a lista agora tem as unidades de SAÚDE junto com as
+                  escolas — o João atende os dois contratos no mesmo balcão e
+                  antes tinha de digitar posto de saúde na mão (por isso só
+                  4 saídas em 3.765 tinham destino da Saúde). */}
+              <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Unidade de destino (escola ou saúde)</label>
+                <input list="escolas-almox" value={saida.escola}
+                  onChange={e => setSaida(p => ({ ...p, escola: e.target.value, contrato: contratoDaUnidade(e.target.value) }))}
+                  className={inputCls} />
+                <datalist id="escolas-almox">
+                  {ESCOLAS.map(e2 => <option key={`e-${e2}`} value={e2} />)}
+                  {UNIDADES_SAUDE.map(s => <option key={`s-${s}`} value={s} />)}
+                </datalist></div>
               <div><label className={`block text-[11px] font-bold uppercase mb-1 ${(saida.destinatario || '').trim() ? 'text-stone-500' : 'text-amber-600'}`}>Quem retirou (confirma no login)</label>
                 <input list="destinatarios" value={saida.destinatario || ''} onChange={e => setSaida(p => ({ ...p, destinatario: e.target.value }))} placeholder="quem levou? (rastro!)"
                   className={(saida.destinatario || '').trim() ? inputCls : 'w-full border-2 border-amber-300 rounded-lg px-3 py-2.5 text-sm bg-amber-50/40 outline-none focus:border-fpv-500'} />
                 <datalist id="destinatarios">{DESTINATARIOS.map(d => <option key={d} value={d} />)}</datalist></div>
             </div>
+            {/* v91: o contrato aparece SEMPRE, já resolvido pela unidade, e
+                dá para trocar. Mostrar em vez de decidir escondido: se o
+                João discordar, ele corrige na hora, e o consumo dos dois
+                contratos nasce separado sem depender de memória. */}
+            {(() => {
+              const ct = (saida.contrato as string) || contratoDaUnidade(saida.escola || '');
+              const ehSaude = ct === 'Saúde';
+              return (
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Contrato (vem da unidade — toque para trocar)</label>
+                  <div className="flex gap-2">
+                    {(['Educação', 'Saúde'] as const).map(c => (
+                      <button key={c} type="button" onClick={() => setSaida(p => ({ ...p, contrato: c }))}
+                        className={`flex-1 text-sm font-bold py-2.5 rounded-xl border ${ct === c
+                          ? (c === 'Saúde' ? 'bg-sky-600 text-white border-sky-600' : 'bg-fpv-500 text-white border-fpv-500')
+                          : 'bg-white text-stone-500 border-stone-200'}`}>{c}</button>
+                    ))}
+                  </div>
+                  {ehSaude && <p className="text-[11px] text-sky-700 mt-1">Baixa no contrato da Saúde — sai do mesmo estoque, mas é prestada em separado.</p>}
+                </div>
+              );
+            })()}
             <div><label className="block text-[11px] font-bold uppercase text-stone-500 mb-1">Observação (de onde veio, detalhe da origem…)</label>
               <input value={saida.obs || ''} onChange={e => setSaida(p => ({ ...p, obs: e.target.value }))} placeholder="ex.: comprado na Hidro Luz p/ emergência" className={inputCls} /></div>
             <button type="submit" disabled={salvando} className="w-full bg-fpv-500 hover:bg-fpv-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60">
@@ -1004,8 +1076,22 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       {sub === 'cadastro' && (
         <>
           <form onSubmit={salvarItem} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
-            <h2 className="font-bold text-stone-900 text-sm">Cadastro no estoque (com quantidade mínima)</h2>
+            <h2 className="font-bold text-stone-900 text-sm">
+              {itemExistente ? 'Atualizar item já cadastrado' : 'Cadastro no estoque (com quantidade mínima)'}
+            </h2>
             <input list="materiais" value={item.descricao} onChange={e => setItem(p => ({ ...p, descricao: e.target.value }))} placeholder="material ou ferramenta" className={inputCls} />
+            {/* v91: aviso de item existente. O pedido do João era editar a
+                quantidade total aqui — dá, mas só com os valores atuais na
+                tela; senão salvar com o formulário em branco zera a contagem. */}
+            {itemExistente && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-[12px] text-amber-900">
+                <b>Este item já existe no catálogo.</b> Hoje está com contagem <b>{itemExistente.saldo_inicial} {itemExistente.unidade}</b>
+                {itemExistente.qtd_minima > 0 && <> e mínimo {itemExistente.qtd_minima}</>} em <b>{itemExistente.categoria}</b>.
+                <br />Salvar assim <b>substitui</b> esses valores pelos que estiverem no formulário.
+                <button type="button" onClick={puxarExistente}
+                  className="mt-1.5 block font-bold text-amber-900 underline">Carregar os valores atuais para eu corrigir</button>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <select value={item.categoria} onChange={e => setItem(p => ({ ...p, categoria: e.target.value }))} className={inputCls}>
                 {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
@@ -1018,7 +1104,10 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
               <div><label className="block text-[10px] font-bold uppercase text-stone-400 mb-0.5">Contagem ATUAL (saldo inicial)</label>
                 <input type="number" step="0.01" min="0" value={item.saldo_inicial} onChange={e => setItem(p => ({ ...p, saldo_inicial: parseFloat(e.target.value) || 0 }))} className={inputCls} /></div>
             </div>
-            <button type="submit" disabled={salvando} className="w-full bg-fpv-500 hover:bg-fpv-600 text-white font-bold py-3 rounded-xl">Salvar no catálogo</button>
+            <button type="submit" disabled={salvando}
+              className={`w-full font-bold py-3 rounded-xl text-white ${itemExistente ? 'bg-amber-600 hover:bg-amber-700' : 'bg-fpv-500 hover:bg-fpv-600'}`}>
+              {itemExistente ? 'Atualizar este item' : 'Salvar no catálogo'}
+            </button>
           </form>
 
           <form onSubmit={salvarEntrada} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">

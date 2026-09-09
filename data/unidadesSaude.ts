@@ -75,6 +75,47 @@ export const fiscalDaUnidadeSaude = (unidade: string): string => {
   return 'Cunha';
 };
 
+// CONTRATO PELA UNIDADE (v91 — pedido do Renan 09/09): o João é um só e
+// atende os dois contratos; quando ele dá baixa de material, o sistema é
+// que tem de saber se aquilo saiu para a Educação ou para a Saúde. Sem
+// isso, o consumo dos dois vira um bolo só e não há como prestar contas
+// separadas — nem defender a medição de cada contrato.
+//
+// Reconhece a unidade escrita de qualquer jeito: nome oficial do Anexo I,
+// apelido do campo ("posto do recanto") ou sigla. Na dúvida devolve
+// 'Educação', que é o contrato de origem do almoxarifado.
+// ATENÇÃO: estes são testados com `includes`, então NÃO pode entrar aqui
+// sigla curta que caiba dentro de outra palavra — 'esf' casaria com
+// "desfazer" e classificaria uma parede como unidade de saúde. Sigla curta
+// vai na regra de palavra inteira, logo abaixo.
+const CHAVES_SAUDE = [
+  'semusa', 'semus', 'hospital', 'hmnm', 'naelma', 'pronto socorro',
+  'valmir hespanhol', 'farmacia municipal', 'resgate 24',
+  'posto de saude', 'clinica da familia',
+  'capsi', 'ambulatorio', 'saude mental',
+  'reabilitacao', 'nasca', 'residencia terapeutica',
+  'catarata', 'pre-operatorio', 'pre operatorio', 'casa de recuperacao',
+  'vigilancia ambiental', 'lactario',
+];
+// siglas e palavras curtas: só valem inteiras
+const PALAVRAS_SAUDE = /\besf\b|\bubs\b|\bupa\b|\bcaps\b|\bposto\b|\bsaude\b|\bcoga\b|\bdesge\b/;
+// Nomes que estão na lista da Saúde mas NÃO são exclusivos dela: a
+// Prefeitura tem 66 saídas do almoxarifado da Educação, e "Casa da
+// Criança"/"Galpão Recanto" são atendidos pelos dois. Estes ficam de fora
+// do casamento automático — quem lança decide.
+const AMBIGUAS = ['prefeitura', 'galpao recanto', 'casa da crianca'];
+export const contratoDaUnidade = (unidade: string): 'Educação' | 'Saúde' => {
+  const u = (unidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  if (!u) return 'Educação';
+  if (AMBIGUAS.includes(u)) return 'Educação';
+  // nome exato do Anexo I resolve sem heurística
+  const exato = UNIDADES_SAUDE.some(n =>
+    n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') === u);
+  if (exato) return 'Saúde';
+  if (PALAVRAS_SAUDE.test(u)) return 'Saúde';
+  return CHAVES_SAUDE.some(c => u.includes(c)) ? 'Saúde' : 'Educação';
+};
+
 // locais DENTRO da unidade de saúde (o "Local" da legenda) — a sala de
 // vacina não existe em escola, e a sala de aula não existe em posto
 export const LOCAIS_SAUDE = [
