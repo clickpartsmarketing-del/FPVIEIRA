@@ -155,7 +155,25 @@ const buscarFotos = async (
   return files;
 };
 
-export type ResultadoShare = 'compartilhado' | 'copiado' | 'cancelado' | 'erro';
+export type ResultadoShare =
+  | 'compartilhado'        // texto + TODAS as fotos
+  | 'compartilhado-parcial' // texto + parte das fotos (o aparelho não aceitou todas)
+  | 'compartilhado-sem-fotos' // só o texto — as fotos NÃO foram
+  | 'copiado' | 'cancelado' | 'erro';
+
+// quantas fotos o aparelho realmente aceita numa folha de compartilhamento.
+// v92: o canShare do Android recusa lote grande (peso total ou nº de
+// arquivos) e cada fabricante corta num ponto. Em vez de desistir e mandar
+// só o texto, vai baixando o lote até achar o que passa.
+const maiorLoteAceito = (nav: any, files: File[]): File[] => {
+  if (!files.length) return [];
+  for (const n of [files.length, 10, 8, 5, 3, 2, 1]) {
+    if (n > files.length) continue;
+    const lote = files.slice(0, n);
+    try { if (nav.canShare?.({ files: lote })) return lote; } catch { /* segue tentando menor */ }
+  }
+  return [];
+};
 
 // Compartilha no grupo: no celular abre a folha nativa (WhatsApp, e-mail…)
 // com legenda + fotos; no desktop copia a legenda pra área de transferência.
@@ -168,12 +186,35 @@ export const compartilharOS = async (
   const nav = navigator as any;
 
   // 1) share nativo COM fotos (celular) — é o caminho que resolve a dor
+  //
+  // v92: ATÉ AQUI ISTO FALHAVA CALADO. Se o canShare recusasse o lote, o
+  // código caía no share só-texto e devolvia 'compartilhado' — a tela dizia
+  // "enviado" e as fotos não iam. Foi o que aconteceu com o Emiliano.
+  // Agora: tenta o lote inteiro, depois lotes menores, e o retorno DIZ o que
+  // realmente foi.
   if (nav.share && urls.length > 0) {
     try {
       const files = await buscarFotos(urls, refDaOS(os), opts.aoProgredir);
-      if (files.length && nav.canShare?.({ files })) {
-        await nav.share({ text: texto, files });
-        return 'compartilhado';
+      const lote = maiorLoteAceito(nav, files);
+      if (lote.length) {
+        const faltam = urls.length - lote.length;
+        // a legenda avisa quando nem todas couberam, senão quem recebe no
+        // grupo não tem como saber que existem mais fotos no sistema
+        const txt = faltam > 0
+          ? `${texto}\n\n_${lote.length} de ${urls.length} fotos — as outras ${faltam} estão no app._`
+          : texto;
+        await nav.share({ text: txt, files: lote });
+        return faltam > 0 ? 'compartilhado-parcial' : 'compartilhado';
+      }
+      // baixou as fotos mas o aparelho não aceita NENHUMA: manda o texto e
+      // avisa, em vez de fingir que foi
+      if (files.length) {
+        try {
+          await nav.share({ text: texto });
+          return 'compartilhado-sem-fotos';
+        } catch (e2: any) {
+          if (e2?.name === 'AbortError') return 'cancelado';
+        }
       }
     } catch (e: any) {
       if (e?.name === 'AbortError') return 'cancelado'; // usuário fechou a folha

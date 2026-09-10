@@ -614,11 +614,18 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
                 aoProgredir: (feitas, total) => setMsgShare(`preparando fotos… ${feitas}/${total}`),
               });
               setCompartilhando(false);
+              // v92: 'sem-fotos' e 'parcial' PRECISAM aparecer. Antes os dois
+              // caíam em "✔ enviado" e o cara ia embora achando que a foto
+              // tinha ido — foi o caso do Emiliano.
               setMsgShare(
-                r === 'compartilhado' ? '✔ enviado' :
+                r === 'compartilhado' ? '✔ enviado com as fotos' :
+                r === 'compartilhado-parcial' ? `⚠️ o texto e PARTE das fotos foram. Este aparelho não aceitou o lote inteiro — mande as que faltam pela galeria.` :
+                r === 'compartilhado-sem-fotos' ? '⚠️ SÓ O TEXTO foi. Este aparelho não deixa anexar foto no compartilhamento — mande as fotos pela galeria do celular.' :
                 r === 'copiado' ? '📋 legenda copiada — cole no grupo e anexe as fotos' :
                 r === 'cancelado' ? '' : 'não deu pra compartilhar neste aparelho'
               );
+              // só some sozinho quando foi tudo; se faltou foto, o aviso fica
+              // na tela até ele fechar
               if (r === 'compartilhado') setTimeout(() => { setUltimaSalva(null); setMsgShare(''); }, 1200);
             }} className="flex-1 bg-fpv-600 active:bg-fpv-700 disabled:bg-stone-300 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
               {compartilhando ? <><Loader2 size={15} className="animate-spin" /> preparando…</> : '📤 Compartilhar no grupo'}

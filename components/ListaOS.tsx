@@ -168,6 +168,10 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
     const r = await compartilharOS(os, medDoMes());
     if (r === 'copiado') alert('📋 Legenda copiada — cole no grupo e anexe as fotos.');
     if (r === 'erro') alert('Não deu pra compartilhar neste aparelho.');
+    // v92: avisar quando a foto NÃO foi junto. Antes isso passava calado e o
+    // grupo recebia o texto sem imagem nenhuma, sem ninguém perceber.
+    if (r === 'compartilhado-sem-fotos') alert('⚠️ Só o TEXTO foi compartilhado.\n\nEste aparelho não deixa anexar foto no compartilhamento. Mande as fotos pela galeria do celular, no mesmo grupo.');
+    if (r === 'compartilhado-parcial') alert('⚠️ O texto foi, mas só PARTE das fotos.\n\nEste aparelho não aceitou o lote inteiro. Confira no grupo quantas chegaram e mande o resto pela galeria.');
   };
 
   // MEDIÇÃO FECHADA = intocável (spec do engenheiro): só a vigente edita.
