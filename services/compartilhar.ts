@@ -161,16 +161,23 @@ export type ResultadoShare =
   | 'compartilhado-sem-fotos' // só o texto — as fotos NÃO foram
   | 'copiado' | 'cancelado' | 'erro';
 
-// quantas fotos o aparelho realmente aceita numa folha de compartilhamento.
-// v92: o canShare do Android recusa lote grande (peso total ou nº de
-// arquivos) e cada fabricante corta num ponto. Em vez de desistir e mandar
-// só o texto, vai baixando o lote até achar o que passa.
+// O MÁXIMO que ESTE aparelho aceita numa folha de compartilhamento.
+//
+// O canShare do Android recusa lote grande (por peso total ou por número de
+// arquivos) e cada fabricante corta num ponto diferente — por isso a mesma
+// O.S. vai inteira no celular do Caleb e não vai no do Emiliano.
+//
+// v93 (regra do Renan 11/09): mandar o MÁXIMO que couber, seja 15 ou 3 —
+// o que não pode é ir nada. A v92 testava só 15/10/8/5/3/2/1 e num aparelho
+// que aceita 12 mandava 10, perdendo 2 fotos que caberiam. Agora desce de
+// um em um e acha o teto exato. São no máximo 15 chamadas síncronas e
+// baratas: não pesa no celular.
 const maiorLoteAceito = (nav: any, files: File[]): File[] => {
   if (!files.length) return [];
-  for (const n of [files.length, 10, 8, 5, 3, 2, 1]) {
-    if (n > files.length) continue;
+  if (!nav.canShare) return [];           // aparelho sem suporte a arquivo
+  for (let n = files.length; n >= 1; n--) {
     const lote = files.slice(0, n);
-    try { if (nav.canShare?.({ files: lote })) return lote; } catch { /* segue tentando menor */ }
+    try { if (nav.canShare({ files: lote })) return lote; } catch { /* tenta com uma a menos */ }
   }
   return [];
 };
