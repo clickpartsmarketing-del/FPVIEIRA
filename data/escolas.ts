@@ -39,6 +39,13 @@ export const ZONA_ESCOLA: [string, string][] = [
   ["Escola M. José Luiz de Lemos", "Wellington"],
   ["Escola M. Jovenil Bastos da Silva", "Renato"],
   ["Escola M. Maria da Penha de Oliveira", "Renato"],
+  // entrou na rede em 11/09/2026 (zona Wellington, confirmada pelo Renan).
+  // As duas grafias ficam na lista de propósito: a casa escreve "Escola M."
+  // e a SEMED manda "E.M." pelo e-mail — a regra de contenção NÃO liga uma
+  // forma à outra, então sem os dois pares a O.S. que vem da ponte cairia
+  // em Central.
+  ["Escola M. Maria Gorete Vicente Jorge", "Wellington"],
+  ["E.M. MARIA GORETE VICENTE JORGE", "Wellington"],
   ["Escola M. Maria Teixeira de Paula", "Renato"],
   ["Escola M. Marinete Coelho Souza", "Wellington"],
   ["Escola M. Mônica de Andrade Ribeiro", "Wellington"],
@@ -127,6 +134,7 @@ export const ESCOLAS = [
   "Creche M. Maria Rosa Ribeiro Pinheiro",
   "Escola M. Ernestina Jorge Pereira",
   "Escola M. Maria da Penha de Oliveira",
+  "Escola M. Maria Gorete Vicente Jorge",
   "Escola M. Alzir David Pereira",
   "Escola M. Ondina Pinto Marcondes",
   "Escola M. Henrique Sarzedas",
