@@ -34,6 +34,38 @@
 -- =====================================================================
 
 -- =====================================================================
+-- 0) TRAVA DE SEGURANCA  (acrescentada em 12/09/2026)
+--
+-- O aviso acima era so comentario, e comentario nao impede ninguem de
+-- colar o arquivo no SQL Editor. Este bloco IMPEDE.
+--
+-- POR QUE: as policies deste arquivo sao as ORIGINAIS, permissivas
+-- (using(true) / with check(true)). Num banco que ja passou pelo
+-- endurecimento de RLS, rodar isto DERRUBA as policies apertadas e
+-- recria as abertas — ou seja, reabre o banco. E um "drop policy" nao
+-- pergunta nada antes.
+--
+-- Este arquivo serve para UMA coisa so: levantar o FPV Campo num banco
+-- VAZIO (copia de teste, restauracao apos desastre, ambiente novo).
+--
+-- Se voce PRECISA mesmo rodar num banco com dado, apague este bloco
+-- conscientemente e rode a RLS vigente logo em seguida, na mesma sessao.
+-- =====================================================================
+do $trava$
+declare n bigint;
+begin
+  if to_regclass('public.os_campo') is not null then
+    execute 'select count(*) from public.os_campo' into n;
+    if n > 0 then
+      raise exception
+        'BASELINE BLOQUEADO: os_campo ja tem % linha(s). Este arquivo recria as policies ORIGINAIS (permissivas) e reabriria o banco. Ele e so para banco VAZIO.', n
+        using hint = 'Para reconstruir um ambiente novo, rode num banco limpo. Para mexer na producao, crie a proxima migration numerada.';
+    end if;
+  end if;
+end
+$trava$;
+
+-- =====================================================================
 -- 1) SEQUENCIAS
 -- =====================================================================
 create sequence if not exists public.seq_fict start with 77;
