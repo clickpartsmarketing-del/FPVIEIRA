@@ -20,9 +20,12 @@
 -- (data/unidadesSaude.ts → contratoDaUnidade, aplicada na migration 0006).
 --
 -- CONFERIDO ANTES DE ESCREVER: rodando a regra contra as 158 unidades
--- distintas de os_campo, dá 13 O.S. de Saúde em 8 unidades e 2.608 de
--- Educação em 150 — e NENHUMA unidade de Educação com nome que sugira
--- saúde. As 13 já estão marcadas pelo app; este SQL preenche as vazias.
+-- distintas de os_campo, NENHUMA unidade de Educação tem nome que sugira
+-- saúde — ou seja, não há falso positivo possível.
+--
+-- ⚠ PROJETO ALVO: fpv-campo22 · lgdnuyreaknxjswrfbjw
+--   NÃO é o da Fiscalização (irprgd…) nem o de Saquarema. Confira o nome
+--   na barra do Supabase antes de dar Run.
 --
 -- SEGURO: só toca linha com contrato NULO ou em branco. Não sobrescreve
 -- nada já preenchido. Rodar 2x não muda nada.
@@ -32,7 +35,8 @@
 select coalesce(nullif(trim(contrato), ''), '(vazio)') as contrato, count(*)
 from os_campo where excluida = false
 group by 1 order by 2 desc;
--- esperado: (vazio) 2607 · Saúde 13 · Educação 1
+-- apurado em 12/09 às 21h: (vazio) 2607 · Saúde 13 · Educação 1
+-- (os números sobem a cada O.S. nova; o que não pode mudar é (vazio) → 0 no fim)
 
 -- 2) SAÚDE pela unidade — mesma regra da 0006
 update os_campo set contrato = 'Saúde'
@@ -69,7 +73,10 @@ select coalesce(nullif(trim(contrato), ''), '(vazio)') as contrato,
        count(*) as os, count(distinct unidade) as unidades
 from os_campo where excluida = false
 group by 1 order by 2 desc;
--- esperado: Educação 2608 · Saúde 13 · (vazio) 0
+-- esperado: Educação ~2607 · Saúde ~14 · (vazio) 0
+-- O QUE IMPORTA CONFERIR: (vazio) = 0, e Saúde na casa da DEZENA.
+-- Se Saúde vier na casa da CENTENA, algum ilike pegou escola demais —
+-- pare e me chame antes de seguir.
 
 -- 6) e quais unidades ficaram na Saúde — confira se faz sentido
 select unidade, count(*) as os
