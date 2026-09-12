@@ -23,6 +23,10 @@ interface Saida {
 interface ItemEstoque {
   id?: number; descricao: string; categoria: string; unidade: string;
   qtd_minima: number; saldo_inicial: number;
+  // v97: quando a contagem física foi feita. O saldo é a contagem mais o
+  // movimento POSTERIOR a esta data — o que saiu antes não desconta.
+  // Nulo = nunca contado (aparece como "sem contagem", sem alarme).
+  contagem_em?: string | null;
 }
 interface Entrada {
   id?: number; data: string; descricao: string; quantidade: number; unidade: string;
@@ -164,24 +168,51 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     return () => { clearTimeout(t); supabase.removeChannel(ch); };
   }, []);
 
-  // ===== saldo por item: contagem inicial + entradas − saídas (devolução
-  // já entra negativa na saída, então somar de volta é automático) =====
-  const somaPor = (rows: { descricao: string; quantidade: number }[]) => {
-    const m: Record<string, number> = {};
-    for (const r of rows) { const k = norm(r.descricao); m[k] = (m[k] || 0) + Number(r.quantidade || 0); }
+  // ===== saldo por item: MARCO ZERO (v97, decisão do Renan 12/09) =====
+  //
+  //    saldo = contagem física + movimento que aconteceu DEPOIS dela
+  //
+  // Antes era contagem + entradas − TODAS as saídas desde 06/01. Como só 21
+  // dos 431 itens tinham contagem, os outros 410 viravam a soma do que já
+  // saiu com sinal negativo — 404 itens no vermelho, lâmpada tubular 18W
+  // marcando −1.109. Saldo calculado a partir de um ponto de partida que
+  // nunca existiu não significa nada.
+  //
+  // Agora a contagem é uma FOTOGRAFIA com data (estoque_item.contagem_em).
+  // O passado sai da conta: "saiu, saiu". Da contagem em diante o movimento
+  // volta a valer — é isso que mantém as cores vivas: conta 100, saem 60, o
+  // painel avisa "repor já".
+  // O corte é POR ITEM (cada um tem a sua data de contagem), então indexar
+  // o movimento uma vez só e depois filtrar por data dentro da lista curta
+  // daquele item. Fazer a soma inteira a cada chamada seria 431 itens ×
+  // 3.789 movimentos a cada renderização — no celular do João isso trava.
+  const movimentoPor = useMemo(() => {
+    const m: Record<string, { data: string; qtd: number }[]> = {};
+    const por = (rows: { descricao: string; quantidade: number; data?: string }[], sinal: number) => {
+      for (const r of rows) {
+        const k = norm(r.descricao);
+        (m[k] ||= []).push({ data: String(r.data || ''), qtd: sinal * Number(r.quantidade || 0) });
+      }
+    };
+    por(entradas, +1);
+    por(saidas, -1);   // devolução já entra negativa na saída, então soma sozinha
     return m;
+  }, [entradas, saidas]);
+
+  const diaDaContagem = (i: ItemEstoque) =>
+    i.contagem_em ? String(i.contagem_em).slice(0, 10) : null;
+  const saldoDe = (i: ItemEstoque) => {
+    const desde = diaDaContagem(i);
+    if (!desde) return 0;                    // sem contagem não há saldo
+    const movs = movimentoPor[norm(i.descricao)] || [];
+    let s = Number(i.saldo_inicial || 0);
+    for (const mv of movs) if (mv.data && mv.data >= desde) s += mv.qtd;
+    return s;
   };
-  const entradasPor = somaPor(entradas);
-  const saidasPor = somaPor(saidas);
-  const saldoDe = (i: ItemEstoque) => Number(i.saldo_inicial || 0) + (entradasPor[norm(i.descricao)] || 0) - (saidasPor[norm(i.descricao)] || 0);
-  // v72: item SEM contagem física não tem saldo — tem histórico de consumo.
-  // 250 dos 254 itens entraram no catálogo pelo cadastro automático (saldo
-  // inicial 0), então "saldo" ali é só a soma do que já saiu, com sinal
-  // negativo. Antes isso passava despercebido porque o .limit(400) só
-  // mostrava a pontinha; com a leitura completa viraria um mar de vermelho
-  // sem significado. Enquanto a gestão não roda o 🧮, o painel diz a
-  // verdade: "sem contagem" — e o alarme só toca em item contado.
-  const temContagem = (i: ItemEstoque) => Number(i.saldo_inicial || 0) > 0;
+  // v97: contado é quem TEM DATA de contagem — não quem tem saldo > 0.
+  // Item contado e encontrado vazio é informação legítima (saldo zero,
+  // alarme ligado); antes ele se confundia com item nunca contado.
+  const temContagem = (i: ItemEstoque) => !!i.contagem_em;
   const semContagem = itens.filter(i => !temContagem(i));
   // mínimo efetivo: o cadastrado no item OU a % padrão do setor sobre a
   // contagem inicial (pedido Renan/Lucas 06/07 — só painel do João)
@@ -598,13 +629,28 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     setMsg(`🗑 ${i.descricao} removido do catálogo.`); carregar();
   };
   const ajustarContagem = async (i: ItemEstoque) => {
-    const s = prompt(`CONTAGEM física de "${i.descricao}" (atual: ${i.saldo_inicial}):`, String(i.saldo_inicial));
+    const marco = i.contagem_em ? new Date(i.contagem_em).toLocaleDateString('pt-BR') : null;
+    const s = prompt(
+      `CONTAGEM física de "${i.descricao}"\n` +
+      (marco ? `contagem atual: ${i.saldo_inicial} ${i.unidade} (de ${marco})\n` : 'nunca foi contado\n') +
+      `\nO número que você digitar vale a partir de HOJE: o que saiu antes\n` +
+      `não desconta, e o que sair daqui pra frente desconta.`,
+      String(i.saldo_inicial));
     if (s == null) return;
     const v = parseFloat(s.replace(',', '.'));
     if (isNaN(v) || v < 0) { setMsg('Valor inválido.'); return; }
-    const { error } = await supabase.from('estoque_item').update({ saldo_inicial: v }).eq('id', i.id);
+    // v97: contar é carimbar a data. Sem ela o saldo não sabe a partir de
+    // quando contar o movimento — era isso que fazia 404 itens ficarem
+    // negativos, somando saída desde janeiro contra contagem nenhuma.
+    const payload: any = { saldo_inicial: v, contagem_em: new Date().toISOString() };
+    let { error } = await supabase.from('estoque_item').update(payload).eq('id', i.id);
+    if (error && /contagem_em/i.test(error.message)) {   // banco sem a 0008
+      delete payload.contagem_em;
+      ({ error } = await supabase.from('estoque_item').update(payload).eq('id', i.id));
+      if (!error) { setMsg(`🧮 ${i.descricao} = ${v}. ⚠️ Rode a migration 0008 — sem ela a data da contagem não é gravada.`); carregar(); return; }
+    }
     if (error) { setMsg('Erro: ' + error.message); return; }
-    setMsg(`🧮 Contagem de ${i.descricao} ajustada para ${v} (gestão).`); carregar();
+    setMsg(`🧮 ${i.descricao} contado: ${v} ${i.unidade}. Vale a partir de hoje.`); carregar();
   };
 
   const marcarSeparado = async (q: Solicitacao) => {
@@ -1212,9 +1258,15 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                   <span className="text-[10px] text-stone-400">{i.categoria}</span>
                   {/* v72: sem contagem física o número não é saldo, é só o
                       consumo acumulado — mostrar como saldo enganava */}
+                  {/* v97: com marco zero o saldo tem DATA. Mostrar desde
+                      quando ele vale — sem isso o número fica sem sentido
+                      para quem lembra do estoque de antes da contagem. */}
                   {temContagem(i)
-                    ? <b className={`tabular-nums ${s <= 0 ? 'text-red-600' : 'text-stone-900'}`}>{s} {i.unidade}</b>
-                    : <span className="text-[10px] font-bold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5 shrink-0" title={`Nunca contado. Já saíram ${Math.abs(s)} ${i.unidade} pelo balcão — faça a contagem no 🧮 para o saldo passar a valer.`}>📋 sem contagem · saiu {Math.abs(s)}</span>}
+                    ? <b className={`tabular-nums ${s <= 0 ? 'text-red-600' : 'text-stone-900'}`}
+                         title={`Contado em ${new Date(i.contagem_em!).toLocaleDateString('pt-BR')}: ${i.saldo_inicial} ${i.unidade}. O que saiu ANTES dessa data não desconta.`}>
+                        {s} {i.unidade}
+                      </b>
+                    : <span className="text-[10px] font-bold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5 shrink-0" title="Nunca contado — sem contagem não há saldo. Toque no 🧮 para contar: o número passa a valer a partir de hoje e o que saiu antes não desconta.">📋 sem contagem</span>}
                   {i.qtd_minima > 0 && <span className="text-[10px] text-stone-400">mín {i.qtd_minima}</span>}
                   {nv && <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${nv.cls}`}>{nv.rot}</span>}
                   <button onClick={() => editarItem(i)} title="Editar descrição/categoria/unidade/mínimo"
