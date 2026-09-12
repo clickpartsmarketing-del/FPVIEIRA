@@ -138,7 +138,21 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     else { recRef.current.start(); setOuvindo(true); }
   };
 
-  const campo = (k: keyof OSCampo, v: any) => setOs(prev => ({ ...prev, [k]: v }));
+  const campo = (k: keyof OSCampo, v: any) => setOs(prev => {
+    const novo: any = { ...prev, [k]: v };
+    // v95: marcar CONCLUÍDO carimba a data se ela estiver vazia.
+    // Até aqui status e data eram campos independentes: o campo marcava
+    // Concluído e deixava a conclusão em branco. Em 07-11/09 isso deixou 15
+    // O.S. "concluídas" sem data nenhuma (L126..L134, 2319, 2409, NS05,
+    // NS06, N03, ES01) — e medição é por período: O.S. sem data de
+    // conclusão não tem como entrar em mês nenhum.
+    // Só PREENCHE o que está vazio; nunca sobrescreve data já informada, e
+    // nunca apaga ao trocar o status de volta.
+    if (k === 'status' && /^(Conclu|Assinatura)/.test(String(v)) && !novo.conclusao) {
+      novo.conclusao = hojeLocal();
+    }
+    return novo;
+  });
 
   const limpar = () => { try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ } setRascunho(null); setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); setUltimaSalva(null); setMsgShare(''); aoCancelarEdicao(); };
 
