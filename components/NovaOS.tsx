@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Save, Mic, Camera, X, Loader2, Eraser, Siren, PackageMinus, Plus, Minus } from 'lucide-react';
 import { OSCampo, STATUS_OPTIONS, FISCAL_OPTIONS, CLASSIF_OPTIONS, EXECUTOR_OPTIONS, MED_OPTIONS, TIPO_OPTIONS, refDaOS } from '../types';
 import { ESCOLAS } from '../data/escolas';
-import { UNIDADES_SAUDE, LOCAIS_SAUDE, fiscalDaUnidadeSaude } from '../data/unidadesSaude';
+import { UNIDADES_SAUDE, LOCAIS_SAUDE, fiscalDaUnidadeSaude, contratoDaUnidade } from '../data/unidadesSaude';
 import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
 import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, DOIS_CONTRATOS, medDoMes, hojeLocal } from '../config';
@@ -196,6 +196,16 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
         setMsg('Conclusão pausada — anexe a foto ou confirme que ela está no grupo.');
         return;
       }
+    }
+    // v96: GARANTE O CONTRATO. Até aqui a O.S. nascia sem ele — só quem tem
+    // o botão dos dois contratos preenchia, e o resultado foi 99,5% das
+    // 2.621 O.S. com o campo vazio. Isso trava a unificação: não dá para
+    // juntar um terceiro contrato num banco onde o discriminador do segundo
+    // não funciona. A unidade decide, igual à saída de material (v91).
+    if (!(os.contrato || '').trim() && os.unidade.trim()) {
+      const ct = contratoDaUnidade(os.unidade);
+      setOs(prev => ({ ...prev, contrato: ct }));
+      os.contrato = ct;   // o payload abaixo lê de `os`, não do estado novo
     }
     // ===== daqui pra baixo é assíncrono: botão TRAVADO =====
     setSalvando(true);
