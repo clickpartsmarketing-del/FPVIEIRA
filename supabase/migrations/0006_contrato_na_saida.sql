@@ -47,7 +47,16 @@ update saida_material set contrato = 'Educação' where contrato is null;
 create index if not exists idx_saida_contrato on saida_material (contrato);
 
 -- ---------------- CONFERÊNCIA ----------------
--- esperado hoje: Saúde = 4 · Educação = 3761 (total 3765)
--- se Saúde vier MUITO acima de 4, algum ilike pegou escola demais: me chame
+-- Apurado no banco em 12/09/2026, antes de você rodar:
+--   Saúde = 5  ("Saúde" 4 + "ESF Mar do Norte" 1)
+--   Educação = 3.775
+--   total = 3.780
+-- Se Saúde vier MUITO acima de 5, algum ilike pegou escola demais: me chame.
+-- (o total cresce a cada saída nova; a proporção é que não deve mudar)
 select contrato, count(*) as saidas, count(distinct escola) as unidades
 from saida_material group by contrato order by saidas desc;
+
+-- e quais unidades ficaram na Saúde — confira se faz sentido
+select escola, count(*) as saidas
+from saida_material where contrato = 'Saúde'
+group by escola order by saidas desc;
