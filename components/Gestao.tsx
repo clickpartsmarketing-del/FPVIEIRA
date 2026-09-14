@@ -1296,7 +1296,7 @@ const TelaMedicao: React.FC<Props> = ({ lista, aoVerLista }) => {
 const Gestao: React.FC<Props> = (props) => {
   // a Rota de Conferência é do ASSISTENTE de engenharia — era do Nicolas,
   // passou pro Marcio Junior em 01/09. Papel novo aqui = uma linha só.
-  if (['marcio', 'nicolas'].includes(props.papel)) return <TelaEngenheiro {...props} />;
+  if (['marcio'].includes(props.papel)) return <TelaEngenheiro {...props} />;
   if (props.papel === 'edmar') return <TelaMedicao {...props} />;
   return (
     <>

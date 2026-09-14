@@ -35,7 +35,11 @@ export const ALMOX = ['joao'];
 // (renomear em massa quebraria o vínculo material↔O.S.).
 export interface Equipe { fiscal: string; membros: string[]; prefixo: string; apelido: string; }
 export const EQUIPES: Record<string, Equipe> = {
-  emergencia1: { fiscal: 'Wellington', membros: ['Wellington', 'Leandro'], prefixo: 'L', apelido: 'Equipe Leandro' },
+  // Caleb entrou na lista em 14/09: ele lança pelo login emergencia1 e
+  // reporta as O.S. L-nn no grupo do Wellington há semanas, mas não estava
+  // nos membros — então a O.S. gerada no balcão em nome dele caía no F-nn
+  // legado em vez de nascer L. (auditoria de acessos, 14/09)
+  emergencia1: { fiscal: 'Wellington', membros: ['Wellington', 'Leandro', 'Caleb'], prefixo: 'L', apelido: 'Equipe Leandro' },
   emergencia2: { fiscal: 'Renato', membros: ['Renato', 'Patrick'], prefixo: 'R', apelido: 'Equipe Renato' },
 };
 

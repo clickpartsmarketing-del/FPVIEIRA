@@ -97,7 +97,7 @@ const App: React.FC = () => {
   // (decisão Renan 07/07)
   // prioridade P1-P3: assistente de engenharia + gestão (Marcio entrou no
   // lugar do Nicolas em 01/09; o nome antigo fica até a conta ser apagada)
-  const podePriorizar = ['marcio', 'nicolas', 'renan', 'lucas'].includes(usuario);
+  const podePriorizar = ['marcio', 'renan', 'lucas'].includes(usuario);
   const equipe = EQUIPES[usuario];
   const corretiva = CORRETIVA[usuario];
   // "responsabilidade do autor do painel": encarregado vê as O.S. em

@@ -6,6 +6,7 @@ import { OSCampo, refDaOS, EXECUTOR_OPTIONS, buscaNorm } from '../types';
 import { MATERIAIS, UNIDADES, ORIGENS, MINIMO_PADRAO_PCT } from '../data/materiais';
 import { ESCOLAS, fiscalDaEscola } from '../data/escolas';
 import { UNIDADES_SAUDE, contratoDaUnidade } from '../data/unidadesSaude';
+import { EQUIPES, CORRETIVA } from '../config';
 import { hojeLocal } from '../config';
 
 // =============================================================
@@ -125,7 +126,7 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   const [apelidos, setApelidos] = useState<string[]>([]); // autopreenchimento acumulativo (REV002)
   const [mesFiltro, setMesFiltro] = useState('TODOS'); // histórico por mês (REV002)
   // contagem: Nicolas/Renan (REV001) + Lucas por ser o gestor geral
-  const podeAjustarContagem = ['marcio', 'nicolas', 'renan', 'lucas'].includes(usuario);
+  const podeAjustarContagem = ['marcio', 'renan', 'lucas'].includes(usuario);
 
   const carregar = async () => {
     const [rs, ri, re, rf, rq] = await Promise.all([
@@ -288,11 +289,25 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   // CORRIGIDO 07/07: renato/wellington estavam com as zonas invertidas
   // da era pré-v27 (fiscal Wellington = equipe L; fiscal Renato = M).
   // Renato agora é TAMBÉM o encarregado da equipe M (troca do Miqueias).
-  const PREFIXO_DEST: Record<string, string> = {
-    'equipe leandro': 'L', 'leandro': 'L', 'wellington': 'L',
-    'equipe renato': 'M', 'equipe miqueias': 'M', 'renato': 'M', 'miqueias': 'M', 'patrick': 'M',
-    'gilson': 'G', 'carlos alberto': 'C',
-  };
+  // v100: este mapa era uma CÓPIA À MÃO do config e saiu de sincronia —
+  // auditoria de 14/09 achou 'renato': 'M' aqui depois de o config já ter
+  // passado a equipe do Renato para 'R' (01/09), e nenhum dos que entraram
+  // desde então (Emiliano, Queiroz, Neilson, André, Abraão) constava. Quem
+  // não estava no mapa tinha a O.S. do balcão caindo no F-nn legado.
+  // Agora DERIVA de EQUIPES + CORRETIVA: pessoa nova no config entra aqui
+  // sozinha, e não existe mais cópia para envelhecer.
+  const PREFIXO_DEST: Record<string, string> = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const eq of Object.values(EQUIPES)) {
+      m[norm(eq.apelido)] = eq.prefixo;               // "equipe leandro"
+      for (const membro of eq.membros) m[norm(membro)] = eq.prefixo;
+    }
+    for (const c of Object.values(CORRETIVA)) {
+      m[norm(c.executor)] = c.prefixo;
+      m[norm(c.apelido)] = c.prefixo;
+    }
+    return m;
+  }, []);
   const [gerarOS, setGerarOS] = useState(false);
 
   const salvarSaida = async (e: React.FormEvent) => {
