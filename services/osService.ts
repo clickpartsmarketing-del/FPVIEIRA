@@ -251,13 +251,69 @@ export const osService = {
 
   // AUDITORIA: sobe o lote e informa quantas FALHARAM — foto de evidência
   // perdida em silêncio é glosa na medição. Quem chama decide avisar.
-  async uploadFotos(files: File[]): Promise<{ urls: string[]; falhas: number }> {
+  // v99: comprime, sobe de 3 em 3, dá prazo de 60s por foto e reporta
+  // progresso — quem está no campo precisa ver que a coisa anda.
+  async uploadFotos(
+    files: File[],
+    aoProgredir?: (feitas: number, total: number) => void,
+  ): Promise<{ urls: string[]; falhas: number }> {
     const urls: string[] = [];
-    let falhas = 0;
-    for (const f of files) {
-      const u = await this.uploadFoto(f);
-      if (u) urls.push(u); else falhas++;
-    }
+    let falhas = 0, feitas = 0;
+    const fila = [...files];
+    const PARALELAS = 3;   // 3 é o ponto em que o 4G da escola ainda respira
+
+    const trabalhador = async () => {
+      while (fila.length) {
+        const f = fila.shift();
+        if (!f) break;
+        const leve = await comprimirFoto(f);
+        const u = await comPrazo<string | null>(osService.uploadFoto(leve), 60000);
+        if (u) urls.push(u); else falhas++;
+        feitas++; aoProgredir?.(feitas, files.length);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PARALELAS, files.length) }, trabalhador));
     return { urls, falhas };
   }
 };
+
+// =====================================================================
+// v99 — POR QUE ISTO EXISTE (caso do Caleb, 14/09/2026): ele adicionou as
+// fotos, o botão ficou girando e nada saía. O storage estava perfeito
+// (testei: 586 ms por foto). O gargalo era o caminho no app:
+//   · a foto subia CRUA, do jeito que o celular tira (2 a 5 MB cada)
+//   · o lote subia UMA DE CADA VEZ, em fila
+//   · não havia PRAZO: uma foto presa no 4G da escola travava o resto
+//   · e a tela não dava sinal nenhum entre "salvando" e o fim
+// 12 fotos viravam ~40 MB em série, sem feedback. Não estava quebrado:
+// estava lento e parecendo morto — que, para quem está em campo com a
+// escola esperando, dá no mesmo.
+// =====================================================================
+
+const LADO_MAX = 1600;   // suficiente p/ ler medidor, trinca, azulejo solto
+const QUALIDADE = 0.72;  // ~250 KB por foto, contra 2-5 MB do original
+
+// Reduz a foto ANTES de subir. Se qualquer coisa falhar (formato exótico,
+// HEIC que o navegador não decodifica, memória), devolve o arquivo original
+// — perder qualidade é ruim, perder a foto é inaceitável.
+export const comprimirFoto = async (file: File): Promise<File> => {
+  if (!file.type.startsWith('image/')) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const escala = Math.min(1, LADO_MAX / Math.max(bmp.width, bmp.height));
+    if (escala === 1 && file.size < 900_000) { bmp.close?.(); return file; } // já é leve
+    const w = Math.round(bmp.width * escala), h = Math.round(bmp.height * escala);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    if (!ctx) { bmp.close?.(); return file; }
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const blob: Blob | null = await new Promise(res => cv.toBlob(res, 'image/jpeg', QUALIDADE));
+    if (!blob || blob.size >= file.size) return file;  // não piorou? fica o original
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch { return file; }
+};
+
+const comPrazo = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
+  Promise.race([p, new Promise<null>(res => setTimeout(() => res(null), ms))]);

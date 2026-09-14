@@ -226,7 +226,13 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
     // AUDITORIA: se o upload de foto falhar (sinal ruim na escola), NÃO salva
     // silenciosamente sem evidência — pergunta antes. Foto perdida = risco de glosa.
-    const { urls: novas, falhas } = await osService.uploadFotos(fotos);
+    // v99: progresso foto a foto. Sem isto o botão só girava e o Caleb
+    // achou que tinha travado — a mesma dor que o Renato teve no
+    // compartilhamento (v87), do outro lado do fluxo.
+    if (fotos.length) setMsg(`enviando fotos… 0/${fotos.length}`);
+    const { urls: novas, falhas } = await osService.uploadFotos(fotos,
+      (feitas, total) => setMsg(`enviando fotos… ${feitas}/${total}`));
+    setMsg('');
     if (falhas > 0) {
       const segue = confirm(`⚠️ ${falhas} foto(s) FALHARAM no envio (sinal fraco?).\n\nOK = salvar mesmo assim (sem essas fotos)\nCancelar = tentar de novo com as fotos`);
       if (!segue) { setSalvando(false); setMsg(`Envio pausado — ${falhas} foto(s) não subiram. Tente salvar de novo.`); return; }
