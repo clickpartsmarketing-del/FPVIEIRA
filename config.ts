@@ -52,6 +52,7 @@ export const DOIS_CONTRATOS = [
   'emergencia1', 'emergencia2',                    // equipes Leandro e Renato
   'gilson', 'carlosalberto', 'emiliano',           // corretiva
   'queiroz', 'neilson', 'miqueias', 'andre',       // entraram 03/09
+  'abraao',                                        // entrou 14/09
 ];
 
 export const CORRETIVA: Record<string, Corretiva> = {
@@ -68,6 +69,10 @@ export const CORRETIVA: Record<string, Corretiva> = {
   neilson: { executor: 'Neilson', prefixo: 'N', apelido: 'Neilson' },
   miqueias: { executor: 'Miqueias', prefixo: 'M', apelido: 'Miqueias' },
   andre: { executor: 'Andre', prefixo: 'A', apelido: 'André' },
+  // Abraão (14/09): lança O.S. como o resto do operacional. O A já é do
+  // André (login criado em 03/09), então a numeração dele nasce em B01.
+  // O B estava livre — nenhuma O.S. no banco usa esse prefixo.
+  abraao: { executor: 'Abraão', prefixo: 'B', apelido: 'Abraão' },
 };
 
 // LOGIN EM 2 TOQUES (pedido Renan 07/07: "muita recusa" ao digitar o
@@ -85,6 +90,7 @@ export const ACESSOS: Acesso[] = [
   { rotulo: 'Neilson', email: 'neilson@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'Miqueias', email: 'miqueias@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'André', email: 'andre@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
+  { rotulo: 'Abraão', email: 'abraao@fpv.app', dica: 'campo · educação e saúde', emoji: '🔧', grupo: 'campo' },
   { rotulo: 'João', email: 'joao@fpv.app', dica: 'almoxarifado', emoji: '📦', grupo: 'campo' },
   // Nicolas saiu da operação (01/09) — conta bloqueada e fora das listas;
   // o histórico dele continua no banco (regra dura nº 11). Marcio Junior
