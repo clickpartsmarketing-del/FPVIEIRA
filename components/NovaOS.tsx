@@ -15,7 +15,10 @@ const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-�
 // bateu no limite registrando antes/depois de várias frentes na mesma O.S.
 // Subiu pra 15 — o custo é upload no sinal da escola, não espaço no banco.
 // Mudar aqui muda no formulário inteiro.
-const MAX_FOTOS = 15;
+// v101 (pedido do Renan 18/09): era 15. Com a compressão da v99 cada foto
+// pesa ~84 KB, então 30 fotos são ~2,5 MB — menos do que 15 fotos pesavam
+// antes de comprimir.
+const MAX_FOTOS = 30;
 
 // defaults por login (spec Nicolas): equipe de emergência já entra com
 // fiscal da zona + EMERGENCIAL ligado; encarregado corretivo já entra
@@ -648,9 +651,9 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
               // caíam em "✔ enviado" e o cara ia embora achando que a foto
               // tinha ido — foi o caso do Emiliano.
               setMsgShare(
-                r === 'compartilhado' ? '✔ enviado com as fotos' :
-                r === 'compartilhado-parcial' ? `⚠️ o texto e PARTE das fotos foram. Este aparelho não aceitou o lote inteiro — mande as que faltam pela galeria.` :
-                r === 'compartilhado-sem-fotos' ? '⚠️ SÓ O TEXTO foi. Este aparelho não deixa anexar foto no compartilhamento — mande as fotos pela galeria do celular.' :
+                r === 'compartilhado' ? '✔ enviado: cartão da O.S. + todas as fotos, num álbum só' :
+                r === 'compartilhado-parcial' ? `⚠️ foi o cartão e PARTE das fotos — este aparelho não aceita o lote inteiro. Mande as que faltam pela galeria.` :
+                r === 'compartilhado-sem-fotos' ? '⚠️ SÓ O TEXTO foi. Este aparelho não deixa anexar imagem no compartilhamento — mande as fotos pela galeria do celular.' :
                 r === 'copiado' ? '📋 legenda copiada — cole no grupo e anexe as fotos' :
                 r === 'cancelado' ? '' : 'não deu pra compartilhar neste aparelho'
               );

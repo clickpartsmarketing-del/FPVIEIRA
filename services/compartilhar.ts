@@ -136,7 +136,7 @@ const buscarFotos = async (
   urls: string[], ref: string,
   aoProgredir?: (feitas: number, total: number) => void,
 ): Promise<File[]> => {
-  const alvo = urls.slice(0, 15); // teto igual ao do formulário (v85)
+  const alvo = urls.slice(0, 30); // teto igual ao do formulário (v101: era 15)
   const files: File[] = [];
   let feitas = 0;
   await Promise.all(alvo.map(async (u, i) => {
@@ -182,6 +182,105 @@ const maiorLoteAceito = (nav: any, files: File[]): File[] => {
   return [];
 };
 
+// =====================================================================
+// CAPA DA O.S. — o cartão vira IMAGEM (v101)
+//
+// POR QUE ISTO EXISTE (caso do Neilson, 18/09/2026): ele anexou 6 fotos e
+// o grupo recebeu 6 mensagens, cada uma com o cartão da O.S. repetido —
+// parecia que ele tinha aberto 6 O.S. No banco estava tudo certo: UMA O.S.
+// (N05) com as 6 fotos. O defeito é do envio.
+//
+// A causa: nav.share({ text, files }) manda legenda E arquivos juntos, e o
+// WhatsApp aplica esse texto como legenda de CADA imagem do lote. Não há
+// como pedir "uma legenda só" pela Web Share API — quem decide é o
+// aplicativo que recebe, e cada um decide diferente. Era isso que fazia o
+// resultado mudar conforme o celular e a operadora.
+//
+// A saída: NÃO mandar texto junto. O cartão vira a PRIMEIRA imagem do
+// álbum. Aí o grupo recebe um álbum só, com o cartão aparecendo uma vez, e
+// o resultado é igual em qualquer aparelho — porque não depende mais de
+// como o WhatsApp trata legenda.
+// =====================================================================
+const LARG = 1080, MARG = 64;
+
+const capaDaOS = async (os: OSCampo, med?: string): Promise<File | null> => {
+  try {
+    // cartão PADRÃO (não o detalhado): é o formato que o Renan fechou em
+    // 03/09 — ref, unidade, local, tipo, criticidade, quantificação,
+    // executado, executante. O detalhado repete material três vezes.
+    const linhas = legendaOS(os, med).split('\n').filter(l => l.trim());
+    const cv = document.createElement('canvas');
+    const ctx = cv.getContext('2d');
+    if (!ctx) return null;
+
+    // 1ª passada: mede para descobrir a altura necessária (texto longo de
+    // serviço não pode vazar para fora da imagem)
+    const medir = (txt: string, fonte: string, largMax: number): string[] => {
+      ctx.font = fonte;
+      const out: string[] = [];
+      for (const paragrafo of txt.split('\n')) {
+        let atual = '';
+        for (const palavra of paragrafo.split(' ')) {
+          const teste = atual ? `${atual} ${palavra}` : palavra;
+          if (ctx.measureText(teste).width > largMax && atual) { out.push(atual); atual = palavra; }
+          else atual = teste;
+        }
+        out.push(atual);
+      }
+      return out;
+    };
+
+    const F_TIT = 'bold 52px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    const F_ROT = 'bold 30px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    const F_VAL = '34px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    const largTexto = LARG - MARG * 2;
+
+    const titulo = linhas[0] || refDaOS(os);
+    const corpo = linhas.slice(1).map(l => {
+      const i = l.indexOf(':');
+      return i > 0 ? { rot: l.slice(0, i).trim(), val: l.slice(i + 1).trim() } : { rot: '', val: l.trim() };
+    });
+
+    let altura = 200 + MARG;                       // faixa do topo
+    const quebrado = corpo.map(c => {
+      const ls = medir(c.val, F_VAL, largTexto);
+      altura += (c.rot ? 40 : 0) + ls.length * 46 + 22;
+      return { ...c, ls };
+    });
+    altura += MARG + 70;                           // rodapé
+
+    cv.width = LARG; cv.height = Math.max(900, Math.round(altura));
+    // fundo
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
+    // faixa verde FPV
+    ctx.fillStyle = '#1f6f52'; ctx.fillRect(0, 0, cv.width, 170);
+    ctx.fillStyle = '#ffffff'; ctx.font = F_TIT;
+    ctx.fillText(titulo.replace(/\*/g, ''), MARG, 108);
+
+    let y = 170 + MARG + 10;
+    for (const c of quebrado) {
+      if (c.rot) {
+        ctx.fillStyle = '#7a7a72'; ctx.font = F_ROT;
+        ctx.fillText(c.rot.replace(/\*/g, '').toUpperCase(), MARG, y);
+        y += 40;
+      }
+      ctx.fillStyle = '#1a1a18'; ctx.font = F_VAL;
+      for (const l of c.ls) { ctx.fillText(l.replace(/[*_]/g, ''), MARG, y); y += 46; }
+      y += 22;
+    }
+    // rodapé
+    ctx.fillStyle = '#b5b5ad'; ctx.font = '26px system-ui, sans-serif';
+    const nf = (os.foto_urls || []).length;
+    ctx.fillText(`F.P. Vieira Engenharia · ${nf} foto(s) nesta O.S.`, MARG, cv.height - 34);
+
+    const blob: Blob | null = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.9));
+    if (!blob) return null;
+    // o "0" no nome mantém a capa em primeiro lugar quando o app de destino
+    // reordena o álbum por nome de arquivo
+    return new File([blob], `OS_0_${refDaOS(os)}_cartao.jpg`, { type: 'image/jpeg' });
+  } catch { return null; }
+};
+
 // Compartilha no grupo: no celular abre a folha nativa (WhatsApp, e-mail…)
 // com legenda + fotos; no desktop copia a legenda pra área de transferência.
 export const compartilharOS = async (
@@ -201,16 +300,21 @@ export const compartilharOS = async (
   // realmente foi.
   if (nav.share && urls.length > 0) {
     try {
-      const files = await buscarFotos(urls, refDaOS(os), opts.aoProgredir);
+      const fotos = await buscarFotos(urls, refDaOS(os), opts.aoProgredir);
+      // a CAPA entra como primeiro arquivo: é o cartão da O.S. virado
+      // imagem. Com ela, o share vai SEM `text` e o WhatsApp não tem
+      // legenda para repetir em cada foto (era o que fazia 6 fotos virarem
+      // 6 cartões no grupo — caso do Neilson, 18/09).
+      const capa = await capaDaOS(os, med);
+      const files = capa ? [capa, ...fotos] : fotos;
       const lote = maiorLoteAceito(nav, files);
       if (lote.length) {
-        const faltam = urls.length - lote.length;
-        // a legenda avisa quando nem todas couberam, senão quem recebe no
-        // grupo não tem como saber que existem mais fotos no sistema
-        const txt = faltam > 0
-          ? `${texto}\n\n_${lote.length} de ${urls.length} fotos — as outras ${faltam} estão no app._`
-          : texto;
-        await nav.share({ text: txt, files: lote });
+        // a legenda também vai para a área de transferência: se ele quiser
+        // texto selecionável no grupo, cola em uma mensagem só
+        try { await (navigator as any).clipboard?.writeText(texto); } catch { /* sem permissão: segue */ }
+        const fotosNoLote = capa && lote[0] === capa ? lote.length - 1 : lote.length;
+        const faltam = urls.length - fotosNoLote;
+        await nav.share({ files: lote });   // SEM text: uma capa, um álbum
         return faltam > 0 ? 'compartilhado-parcial' : 'compartilhado';
       }
       // baixou as fotos mas o aparelho não aceita NENHUMA: manda o texto e
