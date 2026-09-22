@@ -235,17 +235,33 @@ export const osService = {
     return error ? itens.length : 0;
   },
 
-  async uploadFoto(file: File): Promise<string | null> {
+  // v103: DEVOLVE O MOTIVO. Antes isto engolia o erro num console.error e
+  // devolvia null — quem chama só sabia "falhou". Com isso, cota estourada,
+  // permissão negada e arquivo grande demais viravam todos a mesma frase
+  // "sinal fraco?" na tela do campo, e a gente ficava sem saber o que houve
+  // (caso do Caleb, 21 e 22/09: gravações recusadas sem nenhuma pista).
+  async uploadFoto(file: File): Promise<{ url: string | null; erro?: string }> {
     try {
       const ext = file.name.split('.').pop() || 'jpg';
       const path = `os/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const { error } = await supabase.storage.from('fotos-os').upload(path, file);
       if (error) throw error;
       const { data } = supabase.storage.from('fotos-os').getPublicUrl(path);
-      return data.publicUrl;
+      return { url: data.publicUrl };
     } catch (e: any) {
-      console.error('Erro no upload da foto:', e.message);
-      return null;
+      const cru = String(e?.message || e?.error || 'falha desconhecida');
+      const st = Number(e?.statusCode || e?.status || 0);
+      // o que o campo precisa DECIDIR é uma coisa só: tentar de novo resolve?
+      let erro = cru;
+      if (st === 413 || /exceeded|quota|maximum.*size|payload too large/i.test(cru)) {
+        erro = 'ESPAÇO DE FOTOS ESGOTADO no servidor — tentar de novo NÃO resolve, avise a gestão.';
+      } else if (st === 401 || st === 403 || /jwt|unauthorized|not authorized|row-level/i.test(cru)) {
+        erro = 'SESSÃO EXPIRADA ou sem permissão — saia do app e entre de novo.';
+      } else if (/failed to fetch|network|timeout|abort/i.test(cru)) {
+        erro = 'a rede caiu no meio do envio — sinal fraco, pode tentar de novo.';
+      }
+      console.error('Erro no upload da foto:', cru);
+      return { url: null, erro };
     }
   },
 
@@ -253,27 +269,44 @@ export const osService = {
   // perdida em silêncio é glosa na medição. Quem chama decide avisar.
   // v99: comprime, sobe de 3 em 3, dá prazo de 60s por foto e reporta
   // progresso — quem está no campo precisa ver que a coisa anda.
+  // v103: três mudanças, todas por causa de perda de prova em campo.
+  //  1) ORDEM. Antes era `urls.push(...)` de dentro de 3 trabalhadores em
+  //     paralelo, então a ordem era a de CHEGADA: "antes" e "depois" chegavam
+  //     trocados no grupo. Agora grava por ÍNDICE e compacta no fim.
+  //  2) MOTIVO. Devolve `erros` — a tela não precisa mais chutar "sinal fraco?".
+  //  3) QUAIS falharam. Devolve `urlPorIndice`, para quem chama reenviar SÓ o
+  //     que faltou em vez de subir o lote inteiro de novo (cada reenvio cego
+  //     deixava as fotos do lote anterior órfãs no bucket, para sempre).
   async uploadFotos(
     files: File[],
     aoProgredir?: (feitas: number, total: number) => void,
-  ): Promise<{ urls: string[]; falhas: number }> {
-    const urls: string[] = [];
+  ): Promise<{ urls: string[]; falhas: number; erros: string[]; urlPorIndice: (string | null)[] }> {
+    const urlPorIndice: (string | null)[] = new Array(files.length).fill(null);
+    const erros: string[] = [];
     let falhas = 0, feitas = 0;
-    const fila = [...files];
+    let proximo = 0;
     const PARALELAS = 3;   // 3 é o ponto em que o 4G da escola ainda respira
 
     const trabalhador = async () => {
-      while (fila.length) {
-        const f = fila.shift();
-        if (!f) break;
-        const leve = await comprimirFoto(f);
-        const u = await comPrazo<string | null>(osService.uploadFoto(leve), 60000);
-        if (u) urls.push(u); else falhas++;
+      while (true) {
+        const i = proximo++;                 // incremento é atômico no JS de uma thread
+        if (i >= files.length) break;
+        const leve = await comprimirFoto(files[i]);
+        const r = await comPrazo<{ url: string | null; erro?: string }>(
+          osService.uploadFoto(leve), 60000);
+        if (r && r.url) {
+          urlPorIndice[i] = r.url;
+        } else {
+          falhas++;
+          const motivo = r?.erro || 'passou de 60s e foi cancelada — sinal muito fraco.';
+          if (!erros.includes(motivo)) erros.push(motivo);
+        }
         feitas++; aoProgredir?.(feitas, files.length);
       }
     };
     await Promise.all(Array.from({ length: Math.min(PARALELAS, files.length) }, trabalhador));
-    return { urls, falhas };
+    const urls = urlPorIndice.filter((u): u is string => !!u);   // ordem preservada
+    return { urls, falhas, erros, urlPorIndice };
   }
 };
 

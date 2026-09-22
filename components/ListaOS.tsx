@@ -167,10 +167,12 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const compartilhar = async (os: OSCampo) => {
     const r = await compartilharOS(os, medDoMes());
     if (r === 'copiado') alert('📋 Legenda copiada — cole no grupo e anexe as fotos.');
-    if (r === 'erro') alert('Não deu pra compartilhar neste aparelho.');
+    if (r === 'erro') alert('❌ NADA foi enviado — o aparelho recusou o compartilhamento.\n\nA legenda ficou copiada: cole no grupo e mande as fotos pela galeria.');
     // v92: avisar quando a foto NÃO foi junto. Antes isso passava calado e o
     // grupo recebia o texto sem imagem nenhuma, sem ninguém perceber.
-    if (r === 'compartilhado-sem-fotos') alert('⚠️ Só o TEXTO foi compartilhado.\n\nEste aparelho não deixa anexar imagem no compartilhamento. Mande as fotos pela galeria do celular, no mesmo grupo.');
+    // v103: agora cobre também o caso de as fotos não terem BAIXADO do
+    // servidor — que antes caía num "✔ enviado" mentiroso.
+    if (r === 'compartilhado-sem-fotos') alert('⚠️ Só o TEXTO foi compartilhado — NENHUMA foto chegou no grupo.\n\nOu as fotos não baixaram (sinal fraco), ou este aparelho não aceita anexo. Mande as fotos pela galeria do celular, no mesmo grupo.');
     if (r === 'compartilhado-parcial') alert('⚠️ Foi o cartão da O.S. e só PARTE das fotos.\n\nEste aparelho não aceitou o lote inteiro. Confira no grupo quantas chegaram e mande o resto pela galeria.');
   };
 

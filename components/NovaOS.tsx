@@ -233,12 +233,29 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     // achou que tinha travado — a mesma dor que o Renato teve no
     // compartilhamento (v87), do outro lado do fluxo.
     if (fotos.length) setMsg(`enviando fotos… 0/${fotos.length}`);
-    const { urls: novas, falhas } = await osService.uploadFotos(fotos,
+    const { urls: novas, falhas, erros, urlPorIndice } = await osService.uploadFotos(fotos,
       (feitas, total) => setMsg(`enviando fotos… ${feitas}/${total}`));
     setMsg('');
     if (falhas > 0) {
-      const segue = confirm(`⚠️ ${falhas} foto(s) FALHARAM no envio (sinal fraco?).\n\nOK = salvar mesmo assim (sem essas fotos)\nCancelar = tentar de novo com as fotos`);
-      if (!segue) { setSalvando(false); setMsg(`Envio pausado — ${falhas} foto(s) não subiram. Tente salvar de novo.`); return; }
+      // v103: DIZ O MOTIVO. "sinal fraco?" era chute em cima de qualquer falha,
+      // inclusive das que tentar de novo nunca resolve (cota, sessão expirada).
+      const motivo = erros.length ? `\n\nMOTIVO: ${erros.join('\n')}` : '';
+      const segue = confirm(
+        `⚠️ ${falhas} de ${fotos.length} foto(s) NÃO subiram.${motivo}\n\n` +
+        `OK = salvar assim mesmo, SEM essas fotos\n` +
+        `Cancelar = guardar as que já subiram e tentar de novo só as que faltaram`);
+      if (!segue) {
+        // v103: guarda o que JÁ subiu e deixa na tela só o que falhou. Antes as
+        // urls boas eram descartadas e o reenvio subia o lote INTEIRO de novo —
+        // as do lote anterior viravam arquivo órfão no bucket, para sempre, e é
+        // assim que o storage foi de 1 GB para 2,43 GB.
+        setOs(o => ({ ...o, foto_urls: [...o.foto_urls, ...novas] }));
+        setFotos(fs => fs.filter((_, i) => !urlPorIndice[i]));
+        setSalvando(false);
+        setMsg(`${novas.length} foto(s) já guardadas. Faltam ${falhas} — aperte salvar de novo que só elas sobem.`
+          + (erros.length ? ` ${erros[0]}` : ''));
+        return;
+      }
     }
     const urls = [...os.foto_urls, ...novas];
 
@@ -270,7 +287,16 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       ? await osService.salvarEquipe(dados, prefixoUsado)
       : await osService.salvar(dados);
     setSalvando(false);
-    if (!resultado.ok) { setMsg('Erro ao salvar: ' + (resultado.erro || 'verifique a conexão')); return; }
+    if (!resultado.ok) {
+      // v103: a O.S. NÃO foi gravada e o erro cru não diz nada pra quem está em
+      // campo. Em 21 e 22/09 seis gravações foram recusadas pelo banco e não
+      // sobrou rastro nenhum — o motivo morria aqui. Agora o texto pede o print,
+      // que é a única prova que chega até a gestão.
+      console.error('FALHA AO SALVAR O.S.', { erro: resultado.erro, unidade: os.unidade, executor: os.executor });
+      setMsg('❌ A O.S. NÃO foi salva. Motivo: ' + (resultado.erro || 'sem resposta do servidor')
+        + ' — tire um PRINT desta tela e mande no grupo. Suas fotos e o texto continuam aqui, não feche o app.');
+      return;
+    }
 
     const salva = resultado.os;
     const ref = salva && (salva.numero != null || salva.fict_ref || salva.numero_fict) ? refDaOS(salva) : '';
@@ -653,9 +679,12 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
               setMsgShare(
                 r === 'compartilhado' ? '✔ enviado: cartão da O.S. + todas as fotos, num álbum só' :
                 r === 'compartilhado-parcial' ? `⚠️ foi o cartão e PARTE das fotos — este aparelho não aceita o lote inteiro. Mande as que faltam pela galeria.` :
-                r === 'compartilhado-sem-fotos' ? '⚠️ SÓ O TEXTO foi. Este aparelho não deixa anexar imagem no compartilhamento — mande as fotos pela galeria do celular.' :
+                // v103: esta linha agora cobre DUAS causas — o aparelho não
+                // aceitar anexo, e as fotos não terem baixado do servidor.
+                // Antes o segundo caso mentia "✔ enviado com todas as fotos".
+                r === 'compartilhado-sem-fotos' ? '⚠️ SÓ O TEXTO foi — NENHUMA foto chegou no grupo. Ou as fotos não baixaram (sinal), ou este aparelho não aceita anexo. Mande as fotos pela galeria, no mesmo grupo.' :
                 r === 'copiado' ? '📋 legenda copiada — cole no grupo e anexe as fotos' :
-                r === 'cancelado' ? '' : 'não deu pra compartilhar neste aparelho'
+                r === 'cancelado' ? '' : '❌ NADA foi enviado — o aparelho recusou o compartilhamento. A legenda está copiada: cole no grupo e mande as fotos pela galeria.'
               );
               // só some sozinho quando foi tudo; se faltou foto, o aviso fica
               // na tela até ele fechar

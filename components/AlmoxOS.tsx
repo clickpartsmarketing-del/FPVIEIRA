@@ -476,7 +476,11 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     if (!entrada.descricao.trim()) { setMsg('Informe o material da entrada.'); return; }
     setSalvando(true); setMsg('');
     let nf_url: string | null = null;
-    if (nfFoto) nf_url = await osService.uploadFoto(nfFoto);
+    if (nfFoto) {
+      const r = await osService.uploadFoto(nfFoto);   // v103: agora devolve o motivo
+      nf_url = r.url;
+      if (!r.url) { setSalvando(false); setMsg('Foto da NF não subiu: ' + (r.erro || 'falha desconhecida')); return; }
+    }
     const payload: any = { ...entrada, nf_url }; delete payload.id;
     const { error } = await supabase.from('entrada_material').insert([payload]);
     setSalvando(false);

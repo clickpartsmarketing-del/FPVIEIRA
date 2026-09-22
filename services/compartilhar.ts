@@ -199,38 +199,55 @@ export const compartilharOS = async (
   // "enviado" e as fotos não iam. Foi o que aconteceu com o Emiliano.
   // Agora: tenta o lote inteiro, depois lotes menores, e o retorno DIZ o que
   // realmente foi.
+  // v103 — ESTE RAMO É TERMINAL. Ele nunca mais escorre para o bloco 2.
+  // Dois defeitos reais que estavam aqui, os dois com cara do caso do Neilson:
+  //  (a) DUAS MENSAGENS. Se o `nav.share` com arquivos falhasse com qualquer
+  //      coisa que não fosse o usuário cancelando, o catch não retornava e a
+  //      execução caía no bloco 2, que abria uma SEGUNDA folha de
+  //      compartilhamento para a mesma O.S. — a segunda sem foto nenhuma.
+  //  (b) MENTIRA NA TELA. Se NENHUMA foto conseguisse ser baixada do Storage
+  //      (sinal caindo na escola, storage restringido), `buscarFotos` devolvia
+  //      lista vazia sem erro, os dois testes abaixo davam falso e o fluxo caía
+  //      no bloco 2, devolvendo 'compartilhado'. A tela dizia "enviado: cartão
+  //      + todas as fotos" com ZERO foto enviada. É a mesma dor do Emiliano que
+  //      a v92 se propôs a matar, sobrevivendo num ramo que ela não fechou.
   if (nav.share && urls.length > 0) {
+    let fotos: File[] = [];
     try {
-      const fotos = await buscarFotos(urls, refDaOS(os), opts.aoProgredir);
-      // REGRA DO RENAN (18/09): a legenda VAI SEMPRE. Cheguei a tirar o
-      // `text` do share para o WhatsApp não repetir o cartão em cada foto,
-      // e ele vetou: o cartão em texto é o padrão do grupo e não se abre
-      // mão dele. Então o share volta a levar legenda + fotos numa chamada.
-      const lote = maiorLoteAceito(nav, fotos);
-      if (lote.length) {
-        const faltam = urls.length - lote.length;
-        const txt = faltam > 0
-          ? `${texto}\n\n_${lote.length} de ${urls.length} fotos — as outras ${faltam} estão no app._`
-          : texto;
-        // a legenda também fica na área de transferência: se o aparelho
-        // engolir o texto, é só colar no grupo sem redigitar
-        try { await (navigator as any).clipboard?.writeText(txt); } catch { /* sem permissão: segue */ }
+      fotos = await buscarFotos(urls, refDaOS(os), opts.aoProgredir);
+    } catch { fotos = []; /* buscarFotos já engole falha por foto; aqui é o geral */ }
+
+    // REGRA DO RENAN (18/09): a legenda VAI SEMPRE. Cheguei a tirar o
+    // `text` do share para o WhatsApp não repetir o cartão em cada foto,
+    // e ele vetou: o cartão em texto é o padrão do grupo e não se abre
+    // mão dele. Então o share leva legenda + fotos numa ÚNICA chamada.
+    const lote = maiorLoteAceito(nav, fotos);
+    if (lote.length) {
+      const faltam = urls.length - lote.length;
+      const txt = faltam > 0
+        ? `${texto}\n\n_${lote.length} de ${urls.length} fotos — as outras ${faltam} estão no app._`
+        : texto;
+      // a legenda também fica na área de transferência: se o aparelho
+      // engolir o texto, é só colar no grupo sem redigitar
+      try { await (navigator as any).clipboard?.writeText(txt); } catch { /* sem permissão: segue */ }
+      try {
         await nav.share({ text: txt, files: lote });
         return faltam > 0 ? 'compartilhado-parcial' : 'compartilhado';
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return 'cancelado';  // usuário fechou a folha
+        return 'erro';   // recusou a folha: NÃO abre uma segunda
       }
-      // baixou as fotos mas o aparelho não aceita NENHUMA: manda o texto e
-      // avisa, em vez de fingir que foi
-      if (fotos.length) {
-        try {
-          await nav.share({ text: texto });
-          return 'compartilhado-sem-fotos';
-        } catch (e2: any) {
-          if (e2?.name === 'AbortError') return 'cancelado';
-        }
-      }
+    }
+
+    // tem foto no banco e nenhuma pôde ir — ou o download não veio, ou o
+    // aparelho recusou todas. Manda o texto e DIZ que a foto não foi.
+    try { await (navigator as any).clipboard?.writeText(texto); } catch { /* segue */ }
+    try {
+      await nav.share({ text: texto });
+      return 'compartilhado-sem-fotos';
     } catch (e: any) {
-      if (e?.name === 'AbortError') return 'cancelado'; // usuário fechou a folha
-      // qualquer outro erro cai pro share só-texto abaixo
+      if (e?.name === 'AbortError') return 'cancelado';
+      return 'copiado';   // a legenda ficou na área de transferência
     }
   }
   // 2) share nativo só com o texto
