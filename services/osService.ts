@@ -240,7 +240,7 @@ export const osService = {
   // permissão negada e arquivo grande demais viravam todos a mesma frase
   // "sinal fraco?" na tela do campo, e a gente ficava sem saber o que houve
   // (caso do Caleb, 21 e 22/09: gravações recusadas sem nenhuma pista).
-  async uploadFoto(file: File): Promise<{ url: string | null; erro?: string }> {
+  async uploadFoto(file: File, jaRenovou = false): Promise<{ url: string | null; erro?: string }> {
     try {
       const ext = file.name.split('.').pop() || 'jpg';
       const path = `os/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -251,12 +251,32 @@ export const osService = {
     } catch (e: any) {
       const cru = String(e?.message || e?.error || 'falha desconhecida');
       const st = Number(e?.statusCode || e?.status || 0);
+      const ehSessao = st === 401 || st === 403
+        || /jwt|unauthorized|not authorized|row-level|invalid token/i.test(cru);
+
+      // v104 — DOIS CELULARES NO MESMO LOGIN.
+      // A conta emergencia1 é da EQUIPE (Wellington, Leandro e Caleb) e isso
+      // é por decisão do Renan: o Caleb é o motor do Leandro, andam juntos.
+      // Provado pelo GPS: a O.S. 2471 e a 2474 foram carimbadas no mesmo
+      // instante a 12,2 km uma da outra — dois aparelhos ao mesmo tempo.
+      // Quando um entra de novo, a credencial do outro pode deixar de valer,
+      // e aí o Storage recusa TODAS as fotos de uma vez. É por isso que desde
+      // a v99 só este login perde foto: L137, L138, 2462, L151, L155 e a L164.
+      // Em vez de exigir que eles não usem o mesmo login, o app renova a
+      // credencial sozinho e tenta mais UMA vez, calado.
+      if (ehSessao && !jaRenovou) {
+        try {
+          const { error: eRenova } = await supabase.auth.refreshSession();
+          if (!eRenova) return await osService.uploadFoto(file, true);
+        } catch { /* não deu: cai na mensagem clara abaixo */ }
+      }
+
       // o que o campo precisa DECIDIR é uma coisa só: tentar de novo resolve?
       let erro = cru;
       if (st === 413 || /exceeded|quota|maximum.*size|payload too large/i.test(cru)) {
         erro = 'ESPAÇO DE FOTOS ESGOTADO no servidor — tentar de novo NÃO resolve, avise a gestão.';
-      } else if (st === 401 || st === 403 || /jwt|unauthorized|not authorized|row-level/i.test(cru)) {
-        erro = 'SESSÃO EXPIRADA ou sem permissão — saia do app e entre de novo.';
+      } else if (ehSessao) {
+        erro = 'SESSÃO CAIU e não deu pra renovar (outro celular entrou neste mesmo login) — saia do app e entre de novo.';
       } else if (/failed to fetch|network|timeout|abort/i.test(cru)) {
         erro = 'a rede caiu no meio do envio — sinal fraco, pode tentar de novo.';
       }
