@@ -677,7 +677,12 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
               // caíam em "✔ enviado" e o cara ia embora achando que a foto
               // tinha ido — foi o caso do Emiliano.
               setMsgShare(
-                r === 'compartilhado' ? '✔ enviado: cartão da O.S. + todas as fotos, num álbum só' :
+                // v103: O.S. SEM foto nenhuma caía nesta mesma linha e a tela
+                // dizia "+ todas as fotos". Foi o que o Caleb viu em 22/09: o
+                // upload tinha falhado, a O.S. salvou vazia, o grupo recebeu só
+                // a legenda e o app garantiu que as fotos tinham ido.
+                r === 'compartilhado' && n === 0 ? '⚠️ foi SÓ A LEGENDA — esta O.S. não tem NENHUMA foto salva. As fotos não subiram; edite a O.S. e anexe de novo.' :
+                r === 'compartilhado' ? `✔ enviado: cartão da O.S. + ${n} foto(s), num álbum só` :
                 r === 'compartilhado-parcial' ? `⚠️ foi o cartão e PARTE das fotos — este aparelho não aceita o lote inteiro. Mande as que faltam pela galeria.` :
                 // v103: esta linha agora cobre DUAS causas — o aparelho não
                 // aceitar anexo, e as fotos não terem baixado do servidor.
@@ -687,8 +692,8 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
                 r === 'cancelado' ? '' : '❌ NADA foi enviado — o aparelho recusou o compartilhamento. A legenda está copiada: cole no grupo e mande as fotos pela galeria.'
               );
               // só some sozinho quando foi tudo; se faltou foto, o aviso fica
-              // na tela até ele fechar
-              if (r === 'compartilhado') setTimeout(() => { setUltimaSalva(null); setMsgShare(''); }, 1200);
+              // na tela até ele fechar (v103: O.S. vazia também segura o aviso)
+              if (r === 'compartilhado' && n > 0) setTimeout(() => { setUltimaSalva(null); setMsgShare(''); }, 1200);
             }} className="flex-1 bg-fpv-600 active:bg-fpv-700 disabled:bg-stone-300 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
               {compartilhando ? <><Loader2 size={15} className="animate-spin" /> preparando…</> : '📤 Compartilhar no grupo'}
             </button>
