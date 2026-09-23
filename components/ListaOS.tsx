@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp, Share2 } from 'lucide-react';
+import React, { useMemo, useState, useRef } from 'react';
+import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, ChevronUp, Share2, Loader2 } from 'lucide-react';
 import { OSCampo, refDaOS, MED_OPTIONS, buscaNorm } from '../types';
 import { medDoMes, hojeLocal, DESIGNADOS } from '../config';
 import { osService } from '../services/osService';
@@ -82,6 +82,12 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   // da MED 8 — e O.S. recusada pelo fiscal migra p/ a medição seguinte
   // sem abrir o formulário). Só gestão vê o seletor.
   const [mudandoMedId, setMudandoMedId] = useState<number | null>(null);
+  // v105: anti duplo-toque no compartilhar DA LISTA (ver o comentário longo
+  // em compartilhar(), abaixo). A trava de verdade é o ref, que muda na hora;
+  // o estado existe só para a tela mostrar o giro e o progresso.
+  const [compartilhandoId, setCompartilhandoId] = useState<number | null>(null);
+  const [progShare, setProgShare] = useState('');
+  const emShare = useRef(false);
   const mudarMedicao = async (os: OSCampo, med: string) => {
     if (med === (os.medicao || '')) return;
     setMudandoMedId(os.id ?? null);
@@ -164,8 +170,37 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   };
 
   // v78: compartilhar no grupo com a legenda padrão + as fotos da O.S.
+  //
+  // v105 — TRAVA CONTRA TOQUE REPETIDO E PROGRESSO NA TELA.
+  // Este botão não tinha NENHUMA das duas coisas, e o da tela de salvar tem
+  // desde a v87. Quem tocava aqui não via nada acontecer enquanto as fotos
+  // baixavam (cada uma com até 20s de prazo), achava que não tinha pegado e
+  // tocava de novo — e CADA TOQUE abre uma folha de compartilhamento.
+  // É o mecanismo que transforma UMA O.S. em VÁRIAS mensagens no grupo: o
+  // mesmo defeito que a v87 corrigiu no NovaOS e esqueceu aqui.
+  // (caso do Neilson, 18/09: 6 fotos viraram 6 mensagens. O banco estava
+  // certo — a N05 com as 6 fotos numa O.S. só. O estrago foi no envio.)
   const compartilhar = async (os: OSCampo) => {
-    const r = await compartilharOS(os, medDoMes());
+    // a trava é SÍNCRONA de propósito: setState do React chega tarde, e dois
+    // toques no mesmo instante enxergariam o estado antigo e passariam os dois
+    if (emShare.current) return;
+    emShare.current = true;
+    setCompartilhandoId(os.id ?? null);
+    const n = os.foto_urls?.length || 0;
+    setProgShare(n > 3 ? `preparando ${n} fotos…` : 'preparando…');
+    try {
+      await enviarAoGrupo(os);
+    } finally {
+      emShare.current = false;
+      setCompartilhandoId(null);
+      setProgShare('');
+    }
+  };
+
+  const enviarAoGrupo = async (os: OSCampo) => {
+    const r = await compartilharOS(os, medDoMes(), {
+      aoProgredir: (feitas, total) => setProgShare(`preparando fotos… ${feitas}/${total}`),
+    });
     if (r === 'copiado') alert('📋 Legenda copiada — cole no grupo e anexe as fotos.');
     if (r === 'erro') alert('❌ NADA foi enviado — o aparelho recusou o compartilhamento.\n\nA legenda ficou copiada: cole no grupo e mande as fotos pela galeria.');
     // v92: avisar quando a foto NÃO foi junto. Antes isso passava calado e o
@@ -416,8 +451,14 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                           className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"><Hash size={16} /></button>
                       )}
                       {/* v78: manda pro grupo com a legenda padrão + fotos */}
-                      <button onClick={() => compartilhar(os)} title="Compartilhar no grupo (legenda + fotos)"
-                        className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-fpv-50 rounded-lg"><Share2 size={16} /></button>
+                      <button onClick={() => compartilhar(os)} disabled={compartilhandoId !== null}
+                        title={compartilhandoId === os.id ? progShare : 'Compartilhar no grupo (legenda + fotos)'}
+                        className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-fpv-50 rounded-lg disabled:opacity-40">
+                        {compartilhandoId === os.id ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+                      </button>
+                      {compartilhandoId === os.id && (
+                        <span className="self-center text-[10px] font-bold text-fpv-700 whitespace-nowrap">{progShare}</span>
+                      )}
                       <button onClick={() => aoEditar(os)} title="Editar"
                         className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-stone-50 rounded-lg"><Pencil size={16} /></button>
                       {podeExcluir && (
