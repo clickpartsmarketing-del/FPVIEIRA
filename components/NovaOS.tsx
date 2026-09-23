@@ -301,8 +301,16 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
       // sobrou rastro nenhum — o motivo morria aqui. Agora o texto pede o print,
       // que é a única prova que chega até a gestão.
       console.error('FALHA AO SALVAR O.S.', { erro: resultado.erro, unidade: os.unidade, executor: os.executor });
+      // v107: AS FOTOS JÁ ESTÃO NO SERVIDOR. Até aqui, quando a gravação
+      // falhava, as URLs recém-criadas eram descartadas (eram uma const local)
+      // e a próxima tentativa subia TUDO de novo — as do primeiro lote viravam
+      // arquivo órfão no bucket, para sempre. É assim que o storage foi de
+      // 1 GB para 2,43 GB. Agora elas entram no estado: a nova tentativa só
+      // grava, não re-sobe.
+      if (novas.length) { setOs(o => ({ ...o, foto_urls: urls })); setFotos([]); }
       setMsg('❌ A O.S. NÃO foi salva. Motivo: ' + (resultado.erro || 'sem resposta do servidor')
-        + ' — tire um PRINT desta tela e mande no grupo. Suas fotos e o texto continuam aqui, não feche o app.');
+        + (novas.length ? ` — mas as ${novas.length} foto(s) já subiram e estão guardadas: é só apertar salvar de novo.` : '')
+        + ' Tire um PRINT desta tela e mande no grupo. Não feche o app.');
       return;
     }
 
@@ -627,7 +635,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
         {/* v85: o limite era 7 e descartava em SILÊNCIO — o Caleb mandou 7,
             tentou a 8ª e o app não disse nada (parecia que tinha travado).
             Agora avisa quantas entraram e quantas ficaram de fora. */}
-        <input ref={fotoRef} type="file" accept="image/*" multiple className="hidden"
+        <input ref={fotoRef} type="file" accept="image/*" multiple className="hidden" disabled={salvando}
           onChange={e => {
             if (e.target.files) {
               const selecionadas = Array.from(e.target.files) as File[];
@@ -642,15 +650,20 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
             }
             e.target.value = '';
           }} />
+        {/* v107: a área de fotos TRAVA durante o envio. Sem isso o operador
+            anexava mais fotos no meio do upload — elas apareciam na tela e no
+            contador, mas não estavam no lote em voo, e o setFotos([]) do
+            sucesso apagava tudo enquanto a tela dizia "registrada no banco
+            central". Foto de prova sumindo em silêncio. */}
         <div className="flex flex-wrap gap-2 items-center">
-          <button type="button" onClick={() => fotoRef.current?.click()}
-            className="flex items-center gap-2 text-sm font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 px-4 py-2.5 rounded-lg hover:bg-fpv-100">
-            <Camera size={16} /> Tirar / anexar foto
+          <button type="button" disabled={salvando} onClick={() => fotoRef.current?.click()}
+            className="flex items-center gap-2 text-sm font-bold text-fpv-700 bg-fpv-50 border border-fpv-100 px-4 py-2.5 rounded-lg hover:bg-fpv-100 disabled:opacity-40">
+            <Camera size={16} /> {salvando ? 'enviando…' : 'Tirar / anexar foto'}
           </button>
           {fotos.map((f, i) => (
             <span key={i} className="flex items-center gap-1 text-xs bg-stone-100 border border-stone-200 rounded-full px-3 py-1.5">
               📷 {f.name.slice(0, 14)}…
-              <button type="button" onClick={() => setFotos(fotos.filter((_, j) => j !== i))}><X size={12} /></button>
+              <button type="button" disabled={salvando} onClick={() => setFotos(fs => fs.filter((_, j) => j !== i))}><X size={12} /></button>
             </span>
           ))}
           {os.foto_urls.length > 0 && <span className="text-xs text-stone-400">{os.foto_urls.length} já no banco</span>}

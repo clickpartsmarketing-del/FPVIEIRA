@@ -287,11 +287,16 @@ export const osService = {
       // é por decisão do Renan: o Caleb é o motor do Leandro, andam juntos.
       // Provado pelo GPS: a O.S. 2471 e a 2474 foram carimbadas no mesmo
       // instante a 12,2 km uma da outra — dois aparelhos ao mesmo tempo.
-      // Quando um entra de novo, a credencial do outro pode deixar de valer,
-      // e aí o Storage recusa TODAS as fotos de uma vez. É por isso que desde
-      // a v99 só este login perde foto: L137, L138, 2462, L151, L155 e a L164.
-      // Em vez de exigir que eles não usem o mesmo login, o app renova a
-      // credencial sozinho e tenta mais UMA vez, calado.
+      //
+      // CORREÇÃO v107: eu escrevi aqui que "quando um entra de novo, a
+      // credencial do outro deixa de valer". ISSO ESTÁ ERRADO e mandou a
+      // investigação para o lado errado. Um login novo cria uma sessão
+      // INDEPENDENTE no Supabase e não derruba as outras. Quem derruba é o
+      // botão SAIR: signOut() sem argumento usa scope 'global' e revoga a
+      // credencial em TODOS os aparelhos da conta. Corrigido em App.tsx.
+      // Esta renovação continua valendo como rede de segurança — token vence
+      // com o celular no bolso, a tela apaga, a renovação automática falha —
+      // mas ela não é mais a explicação principal.
       if (ehSessao && !jaRenovou) {
         try {
           const { error: eRenova } = await supabase.auth.refreshSession();

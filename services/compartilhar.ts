@@ -137,7 +137,13 @@ const buscarFotos = async (
   aoProgredir?: (feitas: number, total: number) => void,
 ): Promise<File[]> => {
   const alvo = urls.slice(0, 30); // teto igual ao do formulário (v101: era 15)
-  const files: File[] = [];
+  // v107: grava por ÍNDICE, não com push. Com push a posição no álbum era a
+  // ordem em que cada download TERMINOU — a foto leve do "depois" chegava antes
+  // da pesada do "antes", e o fiscal recebia a prova fora de ordem. Pior: o
+  // corte do lote (maiorLoteAceito) tira as últimas do array, então "quem fica
+  // de fora" era sorteio. É o mesmo defeito que a v103 matou no upload e que
+  // sobreviveu aqui, do lado do download.
+  const porIndice: (File | null)[] = new Array(alvo.length).fill(null);
   let feitas = 0;
   await Promise.all(alvo.map(async (u, i) => {
     try {
@@ -148,11 +154,11 @@ const buscarFotos = async (
       if (!r.ok) return;
       const b = await r.blob();
       const ext = (b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-      files.push(new File([b], `OS_${ref}_${i + 1}.${ext}`, { type: b.type || 'image/jpeg' }));
+      porIndice[i] = new File([b], `OS_${ref}_${i + 1}.${ext}`, { type: b.type || 'image/jpeg' });
     } catch { /* foto que não veio fica de fora */ }
     finally { feitas++; aoProgredir?.(feitas, alvo.length); }
   }));
-  return files;
+  return porIndice.filter((f): f is File => !!f);   // ordem da O.S. preservada
 };
 
 export type ResultadoShare =

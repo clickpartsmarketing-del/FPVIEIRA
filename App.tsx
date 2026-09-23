@@ -154,7 +154,17 @@ const App: React.FC = () => {
         <button onClick={recarregar} title="Atualizar" className="p-2 text-stone-400 hover:text-fpv-600 rounded-lg hover:bg-stone-50">
           <RefreshCw size={18} />
         </button>
-        <button onClick={() => { if (confirm('Sair do aplicativo?\nVocê vai precisar digitar a senha de novo para entrar.')) supabase.auth.signOut(); }} title="Sair" className="p-2 text-stone-400 hover:text-red-500 rounded-lg hover:bg-stone-50">
+        {/* v107 — A CAUSA DO "SUMIU A FOTO DO CALEB".
+            signOut() SEM argumento usa scope 'global' (padrão do Supabase,
+            GoTrueClient.js:3347): o servidor revoga a credencial em TODOS os
+            aparelhos daquela conta. A emergencia1 está aberta em três celulares
+            (Wellington, Leandro e Caleb) e a do Queiroz em dois — decisão do
+            Renan, o arranjo fica. Então quem tocava em Sair no fim do dia
+            derrubava os companheiros: eles não caíam na hora, porque o token de
+            acesso ainda valia, e entre 0 e 60 minutos depois TUDO passava a ser
+            recusado de uma vez. Era a falha "zero de N", que parecia sinal.
+            'local' encerra a sessão SÓ deste aparelho. */}
+        <button onClick={() => { if (confirm('Sair SÓ DESTE celular?\n\nOs outros da sua equipe continuam conectados nos aparelhos deles.\nVocê vai precisar digitar a senha de novo para entrar.')) supabase.auth.signOut({ scope: 'local' }); }} title="Sair" className="p-2 text-stone-400 hover:text-red-500 rounded-lg hover:bg-stone-50">
           <LogOut size={18} />
         </button>
       </header>
