@@ -38,7 +38,25 @@ export const osService = {
     return { dados: todas, erro: null };
   },
 
-  async salvar(os: OSCampo): Promise<{ ok: boolean; erro?: string; os?: OSCampo }> {
+  // v106 — A SESSAO CONFERIDA ANTES, NAO DEPOIS.
+  // A conta emergencia1 e da EQUIPE (Leandro + Caleb) e a do Queiroz tambem
+  // tem dois aparelhos, por decisao do Renan. O PWA fica horas no bolso com a
+  // tela apagada; quando volta, a credencial pode estar vencida. Ate a v105 o
+  // app so descobria isso NO MEIO do salvamento — e cada tentativa recusada
+  // queimava um numero da sequencia do banco (6 queimados em 21 e 22/09).
+  // Agora confere e renova ANTES de comecar. Nunca derruba o fluxo: se nao
+  // conseguir renovar, segue e deixa o erro aparecer com a mensagem certa.
+  async garanteSessao(): Promise<void> {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const s: any = data?.session;
+      if (!s) return;                       // sem sessao: o login cuida disso
+      const faltam = (Number(s.expires_at || 0) * 1000) - Date.now();
+      if (faltam < 120000) await supabase.auth.refreshSession();   // menos de 2 min
+    } catch { /* nao atrapalha o salvamento */ }
+  },
+
+  async salvar(os: OSCampo, jaRenovou = false): Promise<{ ok: boolean; erro?: string; os?: OSCampo }> {
     const payload = { ...os };
     delete (payload as any).id;
     delete (payload as any).criado_em;
@@ -124,6 +142,16 @@ export const osService = {
       delete p2.tipo;     // nem o tipo de atividade
       const r2 = await supabase.from('os_campo').insert([p2]).select().single();
       return { ok: !r2.error, erro: r2.error?.message, os: r2.data as OSCampo };
+    }
+
+    // v106: se o banco recusou por CREDENCIAL, renova e tenta mais uma vez.
+    // Mesma protecao que o uploadFoto ganhou na v104 — faltava aqui, e era por
+    // isso que a foto se recuperava sozinha e a O.S. ainda morria.
+    if (error && !jaRenovou && /jwt|unauthorized|not authorized|row-level|invalid token|401|403/i.test(error.message || '')) {
+      try {
+        const { error: eRenova } = await supabase.auth.refreshSession();
+        if (!eRenova) return await osService.salvar(os, true);
+      } catch { /* nao deu: cai na mensagem abaixo */ }
     }
 
     return { ok: !error, erro: error?.message, os: data as OSCampo };

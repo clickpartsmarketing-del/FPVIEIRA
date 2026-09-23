@@ -70,6 +70,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   // EDIÇÃO — o texto do painel muda ("corrigiu… mandar a versão certa?")
   const [salvaFoiEdicao, setSalvaFoiEdicao] = useState(false);
   const [compartilhando, setCompartilhando] = useState(false); // v87: anti duplo-toque no share
+  const emShare = useRef(false);   // v106: a trava de verdade — o estado chega tarde demais
   // v87: contrato escolhido decide a lista de unidades e de locais
   const ehSaude = (os.contrato || '') === 'Saúde';
   const [ouvindo, setOuvindo] = useState(false);
@@ -232,6 +233,13 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     // v99: progresso foto a foto. Sem isto o botão só girava e o Caleb
     // achou que tinha travado — a mesma dor que o Renato teve no
     // compartilhamento (v87), do outro lado do fluxo.
+    // v106: renova a credencial ANTES de começar, se ela estiver perto de
+    // vencer. Dois celulares dividem o mesmo login (Leandro+Caleb, e o Queiroz
+    // também) e o app fica horas no bolso com a tela apagada — é aí que a
+    // sessão morre e o envio inteiro é recusado de uma vez.
+    if (fotos.length) setMsg('conferindo a conexão…');
+    await osService.garanteSessao();
+
     if (fotos.length) setMsg(`enviando fotos… 0/${fotos.length}`);
     const { urls: novas, falhas, erros, urlPorIndice } = await osService.uploadFotos(fotos,
       (feitas, total) => setMsg(`enviando fotos… ${feitas}/${total}`));
@@ -666,13 +674,31 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
                 vezes achando que travou, e cada clique baixava as fotos de
                 novo. Agora mostra o progresso foto a foto. */}
             <button type="button" disabled={compartilhando} onClick={async () => {
+              // v106: a trava do `disabled` sozinha NAO basta. setState do React
+              // e assincrono: dois toques no mesmo frame enxergam
+              // compartilhando=false e passam os DOIS — cada um abrindo uma
+              // folha de compartilhamento, ou seja, duas mensagens no grupo
+              // para a mesma O.S. O ref muda na hora e fecha a porta.
+              // (o ListaOS ganhou esta mesma trava na v105; aqui faltava)
+              if (emShare.current) return;
+              emShare.current = true;
               setCompartilhando(true);
               const n = ultimaSalva.foto_urls?.length || 0;
               setMsgShare(n > 3 ? `preparando ${n} fotos… pode levar alguns segundos no sinal da escola` : 'preparando…');
-              const r = await compartilharOS(ultimaSalva, medDoMes(), {
-                aoProgredir: (feitas, total) => setMsgShare(`preparando fotos… ${feitas}/${total}`),
-              });
-              setCompartilhando(false);
+              // try/finally OBRIGATORIO: sem ele, uma exceção aqui deixaria o
+              // ref travado em true e o botão morto até a tela ser remontada —
+              // seria trocar "duplica" por "não compartilha nunca mais".
+              let r: any = 'erro';
+              try {
+                r = await compartilharOS(ultimaSalva, medDoMes(), {
+                  aoProgredir: (feitas, total) => setMsgShare(`preparando fotos… ${feitas}/${total}`),
+                });
+              } catch {
+                r = 'erro';
+              } finally {
+                emShare.current = false;
+                setCompartilhando(false);
+              }
               // v92: 'sem-fotos' e 'parcial' PRECISAM aparecer. Antes os dois
               // caíam em "✔ enviado" e o cara ia embora achando que a foto
               // tinha ido — foi o caso do Emiliano.
