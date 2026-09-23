@@ -7,7 +7,7 @@ import { KIT_EMERGENCIAL } from '../data/materiais';
 import { guiaMedida } from '../data/areas';
 import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, DOIS_CONTRATOS, medDoMes, hojeLocal } from '../config';
 import { osService } from '../services/osService';
-import { compartilharOS } from '../services/compartilhar';
+import { compartilharOS, prepararFotos, enviarOS, legendaOS } from '../services/compartilhar';
 
 const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
 
@@ -66,6 +66,11 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   // v78: O.S. recém-salva, p/ oferecer o compartilhamento no grupo
   const [ultimaSalva, setUltimaSalva] = useState<OSCampo | null>(null);
   const [msgShare, setMsgShare] = useState('');
+  // v108: as fotos baixadas ANTES do toque. Enquanto for null, o botão ainda
+  // faz o caminho antigo (baixa e envia na mesma ação).
+  const fotosProntas = useRef<File[] | null>(null);
+  const [fotosNoPonto, setFotosNoPonto] = useState(0);   // só para o rótulo do botão
+  const [preparo, setPreparo] = useState<'nada' | 'baixando' | 'pronto'>('nada');
   // v86: o formulário é limpo logo após salvar, então guardo aqui se foi
   // EDIÇÃO — o texto do painel muda ("corrigiu… mandar a versão certa?")
   const [salvaFoiEdicao, setSalvaFoiEdicao] = useState(false);
@@ -118,6 +123,30 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   useEffect(() => {
     try { localStorage.setItem(chaveRascunho, JSON.stringify({ os, t: Date.now() })); } catch { /* sem espaço no aparelho — segue sem rascunho */ }
   }, [os, chaveRascunho]);
+
+  // v108 — BAIXA AS FOTOS ANTES DE ELE TOCAR.
+  // O cartão "Mandar pro grupo?" aparece assim que a O.S. salva, e o operador
+  // leva alguns segundos lendo. Aproveitamos esses segundos: quando ele tocar,
+  // os arquivos já estão na memória e a folha de compartilhamento abre DENTRO
+  // do toque — que é a única forma de o navegador aceitar abri-la.
+  useEffect(() => {
+    fotosProntas.current = null;
+    setFotosNoPonto(0);
+    setPreparo('nada');
+    if (!ultimaSalva) return;
+    const n = ultimaSalva.foto_urls?.length || 0;
+    if (!n) return;                          // O.S. sem foto: nada a preparar
+    setPreparo('baixando');
+    let valeAinda = true;
+    (async () => {
+      const fs = await prepararFotos(ultimaSalva);
+      if (!valeAinda) return;               // ele já fechou o cartão ou salvou outra
+      fotosProntas.current = fs;            // pode vir vazio: o enviarOS avisa
+      setFotosNoPonto(fs.length);
+      setPreparo('pronto');
+    })();
+    return () => { valeAinda = false; };
+  }, [ultimaSalva]);
 
   useEffect(() => {
     if (!VOZ_ATIVA) return; // voz desligada nesta semana — formulário é digitado
@@ -686,7 +715,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
             {/* v87: TRAVA o botão enquanto prepara — o Renato clicou várias
                 vezes achando que travou, e cada clique baixava as fotos de
                 novo. Agora mostra o progresso foto a foto. */}
-            <button type="button" disabled={compartilhando} onClick={async () => {
+            <button type="button" disabled={compartilhando || preparo === 'baixando'} onClick={async () => {
               // v106: a trava do `disabled` sozinha NAO basta. setState do React
               // e assincrono: dois toques no mesmo frame enxergam
               // compartilhando=false e passam os DOIS — cada um abrindo uma
@@ -697,15 +726,26 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
               emShare.current = true;
               setCompartilhando(true);
               const n = ultimaSalva.foto_urls?.length || 0;
-              setMsgShare(n > 3 ? `preparando ${n} fotos… pode levar alguns segundos no sinal da escola` : 'preparando…');
               // try/finally OBRIGATORIO: sem ele, uma exceção aqui deixaria o
               // ref travado em true e o botão morto até a tela ser remontada —
               // seria trocar "duplica" por "não compartilha nunca mais".
               let r: any = 'erro';
               try {
-                r = await compartilharOS(ultimaSalva, medDoMes(), {
-                  aoProgredir: (feitas, total) => setMsgShare(`preparando fotos… ${feitas}/${total}`),
-                });
+                // v108: SE AS FOTOS JÁ ESTÃO PRONTAS, a folha abre AGORA, dentro
+                // deste toque. Esse é o ponto da mudança: o navegador só abre a
+                // folha de compartilhamento logo depois do dedo sair da tela, e
+                // baixar 6 fotos no sinal da escola estourava esse prazo — ele
+                // recusava, a tela mandava colar à mão, o operador colava e
+                // depois tocava de novo, e o grupo recebia o cartão DUAS VEZES.
+                if (preparo === 'pronto' && fotosProntas.current) {
+                  r = await enviarOS(legendaOS(ultimaSalva, medDoMes()), fotosProntas.current, n);
+                } else {
+                  // ainda baixando (ou sem foto): faz o caminho de um passo
+                  setMsgShare(n > 3 ? `preparando ${n} fotos… pode levar alguns segundos no sinal da escola` : 'preparando…');
+                  r = await compartilharOS(ultimaSalva, medDoMes(), {
+                    aoProgredir: (feitas, total) => setMsgShare(`preparando fotos… ${feitas}/${total}`),
+                  });
+                }
               } catch {
                 r = 'erro';
               } finally {
@@ -734,7 +774,15 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
               // na tela até ele fechar (v103: O.S. vazia também segura o aviso)
               if (r === 'compartilhado' && n > 0) setTimeout(() => { setUltimaSalva(null); setMsgShare(''); }, 1200);
             }} className="flex-1 bg-fpv-600 active:bg-fpv-700 disabled:bg-stone-300 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
-              {compartilhando ? <><Loader2 size={15} className="animate-spin" /> preparando…</> : '📤 Compartilhar no grupo'}
+              {compartilhando
+                ? <><Loader2 size={15} className="animate-spin" /> enviando…</>
+                : preparo === 'baixando'
+                  ? <><Loader2 size={15} className="animate-spin" /> preparando as fotos…</>
+                  : preparo === 'pronto' && fotosNoPonto > 0
+                    ? `📤 ENVIAR AGORA — ${fotosNoPonto} foto(s) prontas`
+                    : preparo === 'pronto'
+                      ? '📤 Enviar só a legenda (as fotos não baixaram)'
+                      : '📤 Compartilhar no grupo'}
             </button>
             <button type="button" onClick={() => { setUltimaSalva(null); setMsgShare(''); }}
               className="px-4 border border-stone-300 rounded-xl text-sm font-bold text-stone-600">agora não</button>

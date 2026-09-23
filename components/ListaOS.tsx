@@ -3,7 +3,7 @@ import { Pencil, Trash2, Siren, Search, CheckCircle2, Hash, Lock, ChevronDown, C
 import { OSCampo, refDaOS, MED_OPTIONS, buscaNorm } from '../types';
 import { medDoMes, hojeLocal, DESIGNADOS } from '../config';
 import { osService } from '../services/osService';
-import { compartilharOS } from '../services/compartilhar';
+import { compartilharOS, prepararFotos, enviarOS, legendaOS } from '../services/compartilhar';
 import { supabase } from '../services/supabaseClient';
 
 interface Props {
@@ -88,6 +88,8 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   const [compartilhandoId, setCompartilhandoId] = useState<number | null>(null);
   const [progShare, setProgShare] = useState('');
   const emShare = useRef(false);
+  const [prontoId, setProntoId] = useState<number | null>(null);   // v108: qual O.S. já está com as fotos na mão
+  const fotosProntas = useRef<File[] | null>(null);
   const mudarMedicao = async (os: OSCampo, med: string) => {
     if (med === (os.medicao || '')) return;
     setMudandoMedId(os.id ?? null);
@@ -180,27 +182,63 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
   // mesmo defeito que a v87 corrigiu no NovaOS e esqueceu aqui.
   // (caso do Neilson, 18/09: 6 fotos viraram 6 mensagens. O banco estava
   // certo — a N05 com as 6 fotos numa O.S. só. O estrago foi no envio.)
+  // v108 — DOIS PASSOS NA LISTA TAMBÉM.
+  // O 1º toque só BAIXA as fotos; o botão então vira "ENVIAR" e o 2º toque
+  // abre a folha de compartilhamento sem esperar nada. O navegador só aceita
+  // abrir essa folha logo depois do dedo sair da tela, e baixar as fotos
+  // estourava esse prazo — ele recusava, a tela mandava colar à mão, o
+  // operador colava e tocava de novo: o grupo recebia o cartão duas vezes.
+  // Na lista não dá para baixar sozinho como o formulário faz (seriam
+  // centenas de linhas), então o preparo é o primeiro toque.
   const compartilhar = async (os: OSCampo) => {
     // a trava é SÍNCRONA de propósito: setState do React chega tarde, e dois
     // toques no mesmo instante enxergariam o estado antigo e passariam os dois
     if (emShare.current) return;
+
+    // 2º toque: já está preparada — ENVIA AGORA, sem nenhum await antes
+    if (prontoId === os.id && fotosProntas.current) {
+      emShare.current = true;
+      try {
+        avisar(await enviarOS(legendaOS(os, medDoMes()), fotosProntas.current, os.foto_urls?.length || 0));
+      } catch { avisar('erro'); }
+      finally { emShare.current = false; fotosProntas.current = null; setProntoId(null); }
+      return;
+    }
+
+    const n = os.foto_urls?.length || 0;
+    // O.S. sem foto: nada a preparar, o toque já vale
+    if (!n) {
+      emShare.current = true;
+      setCompartilhandoId(os.id ?? null);
+      try { avisar(await compartilharOS(os, medDoMes())); }
+      catch { avisar('erro'); }
+      finally { emShare.current = false; setCompartilhandoId(null); }
+      return;
+    }
+
+    // 1º toque: prepara
     emShare.current = true;
     setCompartilhandoId(os.id ?? null);
-    const n = os.foto_urls?.length || 0;
-    setProgShare(n > 3 ? `preparando ${n} fotos…` : 'preparando…');
+    setProntoId(null);
+    fotosProntas.current = null;
+    setProgShare(`preparando ${n} fotos…`);
     try {
-      await enviarAoGrupo(os);
+      const fs = await prepararFotos(os, (feitas, total) => setProgShare(`preparando fotos… ${feitas}/${total}`));
+      fotosProntas.current = fs;
+      setProntoId(os.id ?? null);
+      setProgShare(fs.length ? `${fs.length} pronta(s) — toque em ENVIAR` : 'as fotos não baixaram — toque para mandar só a legenda');
+    } catch {
+      fotosProntas.current = [];
+      setProntoId(os.id ?? null);
+      setProgShare('as fotos não baixaram — toque para mandar só a legenda');
     } finally {
       emShare.current = false;
       setCompartilhandoId(null);
-      setProgShare('');
     }
   };
 
-  const enviarAoGrupo = async (os: OSCampo) => {
-    const r = await compartilharOS(os, medDoMes(), {
-      aoProgredir: (feitas, total) => setProgShare(`preparando fotos… ${feitas}/${total}`),
-    });
+  const avisar = (r: string) => {
+    setProgShare('');
     if (r === 'copiado') alert('📋 Legenda copiada — cole no grupo e anexe as fotos.');
     if (r === 'erro') alert('❌ NADA foi enviado — o aparelho recusou o compartilhamento.\n\nA legenda ficou copiada: cole no grupo e mande as fotos pela galeria.');
     // v92: avisar quando a foto NÃO foi junto. Antes isso passava calado e o
@@ -451,12 +489,15 @@ const ListaOS: React.FC<Props> = ({ lista, aoEditar, aoMudar, filtroMinhas, rotu
                           className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"><Hash size={16} /></button>
                       )}
                       {/* v78: manda pro grupo com a legenda padrão + fotos */}
+                      {/* v108: 1º toque prepara, 2º envia — o navegador só abre a
+                          folha de compartilhamento dentro do toque, e baixar as
+                          fotos estourava esse prazo */}
                       <button onClick={() => compartilhar(os)} disabled={compartilhandoId !== null}
-                        title={compartilhandoId === os.id ? progShare : 'Compartilhar no grupo (legenda + fotos)'}
-                        className="p-1.5 text-stone-400 hover:text-fpv-600 hover:bg-fpv-50 rounded-lg disabled:opacity-40">
+                        title={compartilhandoId === os.id ? progShare : (prontoId === os.id ? 'Fotos prontas — toque para ENVIAR' : 'Compartilhar no grupo (legenda + fotos)')}
+                        className={`p-1.5 rounded-lg disabled:opacity-40 ${prontoId === os.id ? 'text-white bg-fpv-600' : 'text-stone-400 hover:text-fpv-600 hover:bg-fpv-50'}`}>
                         {compartilhandoId === os.id ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
                       </button>
-                      {compartilhandoId === os.id && (
+                      {(compartilhandoId === os.id || prontoId === os.id) && progShare && (
                         <span className="self-center text-[10px] font-bold text-fpv-700 whitespace-nowrap">{progShare}</span>
                       )}
                       <button onClick={() => aoEditar(os)} title="Editar"

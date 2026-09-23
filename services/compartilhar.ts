@@ -188,6 +188,85 @@ const maiorLoteAceito = (nav: any, files: File[]): File[] => {
   return [];
 };
 
+// =====================================================================
+// v108 — PREPARAR e ENVIAR viraram DOIS PASSOS. O motivo é o seguinte.
+//
+// O navegador só abre a folha de compartilhamento se `navigator.share` for
+// chamado dentro da JANELA DE ATIVAÇÃO do toque — poucos segundos depois de o
+// dedo sair da tela. Até a v107 o fluxo era:
+//     toque → BAIXA as fotos do Storage (até 20s) → escreve na área de
+//     transferência (mais um await) → só então chama a folha.
+// No sinal da escola o toque já tinha expirado quando a folha era pedida. O
+// navegador recusava com NotAllowedError, o app devolvia 'erro' e a tela
+// mandava o operador COLAR a legenda à mão e mandar as fotos pela galeria.
+// Ele fazia isso e, em seguida, tocava no botão de novo — e o grupo recebia o
+// cartão DUAS VEZES. É a duplicação que o Neilson vinha relatando, e ela não
+// era duplo-toque: era o app pedindo a folha tarde demais.
+//
+// Agora: `prepararFotos` baixa (pode demorar o que for), e `enviarOS` chama a
+// folha como PRIMEIRA COISA de um toque NOVO, sem nenhum await antes dela.
+// A cópia para a área de transferência foi para DEPOIS do share, pelo mesmo
+// motivo: ela era um await entre o dedo e a folha.
+// =====================================================================
+export const prepararFotos = async (
+  os: OSCampo,
+  aoProgredir?: (feitas: number, total: number) => void,
+): Promise<File[]> => {
+  const urls = os.foto_urls || [];
+  if (!urls.length) return [];
+  try { return await buscarFotos(urls, refDaOS(os), aoProgredir); } catch { return []; }
+};
+
+// NADA de await antes do nav.share. Se precisar mexer aqui, mantenha essa regra.
+export const enviarOS = async (
+  texto: string, fotos: File[], totalUrls: number,
+): Promise<ResultadoShare> => {
+  const nav = navigator as any;
+
+  if (nav.share && fotos.length) {
+    // REGRA DO RENAN (18/09): a legenda VAI SEMPRE junto com as fotos.
+    // canShare é síncrono — não gasta a janela de ativação.
+    const lote = maiorLoteAceito(nav, fotos);
+    if (lote.length) {
+      const faltam = Math.max(0, totalUrls - lote.length);
+      const txt = faltam > 0
+        ? `${texto}\n\n_${lote.length} de ${totalUrls} fotos — as outras ${faltam} estão no app._`
+        : texto;
+      try {
+        await nav.share({ text: txt, files: lote });        // <<< primeira coisa
+        // só depois de a folha ter aberto: a legenda na área de transferência,
+        // para o caso de o aparelho engolir o texto
+        try { await nav.clipboard?.writeText(txt); } catch { /* sem permissão: segue */ }
+        return faltam > 0 ? 'compartilhado-parcial' : 'compartilhado';
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return 'cancelado';   // usuário fechou a folha
+        try { await nav.clipboard?.writeText(txt); } catch { /* segue */ }
+        return 'erro';   // recusou: NÃO abre uma segunda folha
+      }
+    }
+  }
+
+  // sem foto para mandar — ou o aparelho não aceita nenhuma, ou o download
+  // não veio, ou a O.S. não tem foto. Manda o texto e DIZ o que foi.
+  if (nav.share) {
+    try {
+      await nav.share({ text: texto });
+      try { await nav.clipboard?.writeText(texto); } catch { /* segue */ }
+      return totalUrls > 0 ? 'compartilhado-sem-fotos' : 'compartilhado';
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return 'cancelado';
+    }
+  }
+
+  // desktop: copia a legenda (as fotos o gestor pega no app/relatório)
+  try {
+    await navigator.clipboard.writeText(texto);
+    return 'copiado';
+  } catch {
+    try { window.prompt('Copie a legenda:', texto); return 'copiado'; } catch { return 'erro'; }
+  }
+};
+
 // Compartilha no grupo: no celular abre a folha nativa (WhatsApp, e-mail…)
 // com legenda + fotos; no desktop copia a legenda pra área de transferência.
 export const compartilharOS = async (
@@ -217,59 +296,10 @@ export const compartilharOS = async (
   //      no bloco 2, devolvendo 'compartilhado'. A tela dizia "enviado: cartão
   //      + todas as fotos" com ZERO foto enviada. É a mesma dor do Emiliano que
   //      a v92 se propôs a matar, sobrevivendo num ramo que ela não fechou.
-  if (nav.share && urls.length > 0) {
-    let fotos: File[] = [];
-    try {
-      fotos = await buscarFotos(urls, refDaOS(os), opts.aoProgredir);
-    } catch { fotos = []; /* buscarFotos já engole falha por foto; aqui é o geral */ }
-
-    // REGRA DO RENAN (18/09): a legenda VAI SEMPRE. Cheguei a tirar o
-    // `text` do share para o WhatsApp não repetir o cartão em cada foto,
-    // e ele vetou: o cartão em texto é o padrão do grupo e não se abre
-    // mão dele. Então o share leva legenda + fotos numa ÚNICA chamada.
-    const lote = maiorLoteAceito(nav, fotos);
-    if (lote.length) {
-      const faltam = urls.length - lote.length;
-      const txt = faltam > 0
-        ? `${texto}\n\n_${lote.length} de ${urls.length} fotos — as outras ${faltam} estão no app._`
-        : texto;
-      // a legenda também fica na área de transferência: se o aparelho
-      // engolir o texto, é só colar no grupo sem redigitar
-      try { await (navigator as any).clipboard?.writeText(txt); } catch { /* sem permissão: segue */ }
-      try {
-        await nav.share({ text: txt, files: lote });
-        return faltam > 0 ? 'compartilhado-parcial' : 'compartilhado';
-      } catch (e: any) {
-        if (e?.name === 'AbortError') return 'cancelado';  // usuário fechou a folha
-        return 'erro';   // recusou a folha: NÃO abre uma segunda
-      }
-    }
-
-    // tem foto no banco e nenhuma pôde ir — ou o download não veio, ou o
-    // aparelho recusou todas. Manda o texto e DIZ que a foto não foi.
-    try { await (navigator as any).clipboard?.writeText(texto); } catch { /* segue */ }
-    try {
-      await nav.share({ text: texto });
-      return 'compartilhado-sem-fotos';
-    } catch (e: any) {
-      if (e?.name === 'AbortError') return 'cancelado';
-      return 'copiado';   // a legenda ficou na área de transferência
-    }
-  }
-  // 2) share nativo só com o texto
-  if (nav.share) {
-    try {
-      await nav.share({ text: texto });
-      return 'compartilhado';
-    } catch (e: any) {
-      if (e?.name === 'AbortError') return 'cancelado';
-    }
-  }
-  // 3) desktop: copia a legenda (as fotos o gestor pega no app/relatório)
-  try {
-    await navigator.clipboard.writeText(texto);
-    return 'copiado';
-  } catch {
-    try { window.prompt('Copie a legenda:', texto); return 'copiado'; } catch { return 'erro'; }
-  }
+  // v108: virou um atalho de UM PASSO — baixa e envia em seguida. Continua
+  // servindo a O.S. SEM FOTO (nada a baixar, o toque chega inteiro na folha) e
+  // o desktop. Quem tem foto deve usar prepararFotos + enviarOS, senão o
+  // download come a janela de ativação e o navegador recusa a folha.
+  const fotos = await prepararFotos(os, opts.aoProgredir);
+  return enviarOS(texto, fotos, urls.length);
 };
