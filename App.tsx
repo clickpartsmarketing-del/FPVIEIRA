@@ -4,6 +4,7 @@ import { supabase } from './services/supabaseClient';
 import { osService } from './services/osService';
 import { OSCampo, EXECUTOR_OPTIONS } from './types';
 import { VOZ_ATIVA, GESTORES, ALMOX, EQUIPES, CORRETIVA } from './config';
+import { chegouPorLink } from './services/deepLink';
 import LoginScreen from './components/LoginScreen';
 import ChatOS from './components/ChatOS';
 import NovaOS from './components/NovaOS';
@@ -29,7 +30,8 @@ const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-�
 const App: React.FC = () => {
   const [sessao, setSessao] = useState<any>(null);
   const [carregandoSessao, setCarregandoSessao] = useState(true);
-  const [aba, setAba] = useState<Aba>(VOZ_ATIVA ? 'chat' : 'nova');
+  // v109: link do fiscal (?os=...) abre direto na Nova O.S. pré-preenchida
+  const [aba, setAba] = useState<Aba>(chegouPorLink ? 'nova' : VOZ_ATIVA ? 'chat' : 'nova');
   const [lista, setLista] = useState<OSCampo[]>([]);
   const [editando, setEditando] = useState<OSCampo | null>(null);
   const [erroLista, setErroLista] = useState('');
@@ -50,11 +52,18 @@ const App: React.FC = () => {
   // gestores, engenheiro e medição abrem direto na tela deles — SÓ 1x por login
   // (refresh de token dispara onAuthStateChange e não pode teleportar o usuário)
   const jaDirecionou = useRef(false);
+  const linkDirecionou = useRef(false); // v109: o desvio pro formulário vale 1x por carga
   useEffect(() => {
     if (!sessao) { jaDirecionou.current = false; return; }
     const u = sessao.user?.email?.split('@')[0];
     if (u && !jaDirecionou.current) {
-      if (GESTORES.includes(u)) { jaDirecionou.current = true; setAba('gestao'); }
+      // v109: deep link do fiscal VENCE o teleporte — sem isso a equipe é
+      // levada pro painel e o formulário pré-preenchido fica invisível.
+      // Exceção: quem SÓ vê o almoxarifado (João) não tem a aba 'nova' —
+      // desviar p/ ela daria tela em branco; ele segue o teleporte normal.
+      const soVeAlmox = ALMOX.includes(u) && !GESTORES.includes(u);
+      if (chegouPorLink && !linkDirecionou.current && !soVeAlmox) { linkDirecionou.current = true; jaDirecionou.current = true; setAba('nova'); }
+      else if (GESTORES.includes(u)) { jaDirecionou.current = true; setAba('gestao'); }
       else if (ALMOX.includes(u)) { jaDirecionou.current = true; setAba('almox'); }
       else if (EQUIPES[u] || CORRETIVA[u]) { jaDirecionou.current = true; setAba('painel'); }
     }

@@ -8,6 +8,7 @@ import { guiaMedida } from '../data/areas';
 import { VOZ_ATIVA, GESTORES, EQUIPES, CORRETIVA, DOIS_CONTRATOS, medDoMes, hojeLocal } from '../config';
 import { osService } from '../services/osService';
 import { compartilharOS, prepararFotos, enviarOS, legendaOS } from '../services/compartilhar';
+import { deepLinkPrefill, consomeDeepLink } from '../services/deepLink';
 
 const normaliza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
 
@@ -56,7 +57,13 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   // prefixo da numeração automática: L/M (equipes) ou G/C (corretiva)
   const prefixoRef = equipe?.prefixo ?? corretiva?.prefixo;
   const ehGestor = GESTORES.includes(usuario);
-  const [os, setOs] = useState<OSCampo>(() => vaziaPara(usuario));
+  // v109: pedido do fiscal vindo pelo LINK do grupo (?os=...) — aplicado uma
+  // única vez, no initializer (StrictMode-safe: o módulo lê a URL 1x e o
+  // consumo no efeito abaixo é idempotente)
+  const prefillLink = useRef<Partial<OSCampo> | null>(deepLinkPrefill());
+  const [avisoLink, setAvisoLink] = useState('');
+  const [os, setOs] = useState<OSCampo>(() =>
+    prefillLink.current ? { ...vaziaPara(usuario), ...prefillLink.current } : vaziaPara(usuario));
   const [fotos, setFotos] = useState<File[]>([]);
   const [kit, setKit] = useState<Record<string, number>>({}); // descricao → qtd usada
   const [kitAberto, setKitAberto] = useState(false);
@@ -104,6 +111,22 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     }
   }, [editando]);
 
+  // v109: consumo do deep link — limpa a query da barra (F5 não re-preenche)
+  // e avisa NA HORA se um colega já registrou essa O.S. (antes o colaborador
+  // só descobria no salvar, com uma mensagem que sugeria gerar fictícia).
+  useEffect(() => {
+    const p = prefillLink.current;
+    if (!p) return;
+    consomeDeepLink();
+    (async () => {
+      if (!p.numero) return;
+      const existe = await osService.numeroExiste(Number(p.numero));
+      if (existe) setAvisoLink(`⛔ A O.S. ${p.numero} JÁ FOI REGISTRADA (${existe.unidade} · ${existe.status}) — outro colega chegou primeiro. Ache-a na LISTA e complete pelo lápis. NÃO registre de novo.`);
+      else setAvisoLink(`📥 O.S. ${p.numero} recebida do fiscal — confira os dados, registre a execução e mande pro grupo.`);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // RASCUNHO AUTOMÁTICO (Renan 09/07: celular do campo trava e perde a
   // digitação — caso do encarregado que prefere papel): cada tecla fica
   // guardada NO APARELHO; travou/fechou, ao reabrir aparece o botão
@@ -111,6 +134,11 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
   const chaveRascunho = editando?.id ? `fpv_rascunho_${editando.id}` : 'fpv_rascunho_novo';
   const [rascunho, setRascunho] = useState<OSCampo | null>(null);
   useEffect(() => {
+    // v109 (revisão): rascunho antigo CONTINUA sendo oferecido mesmo chegando
+    // pelo link do fiscal — o banner fica por cima do formulário preenchido e
+    // o colaborador decide. Suprimir aqui destruía digitação não salva (o
+    // autosave sobrescreve o storage no 1º render; a recuperação vive no
+    // estado `rascunho` deste mount).
     try {
       const raw = localStorage.getItem(chaveRascunho);
       if (!raw) { setRascunho(null); return; }
@@ -187,7 +215,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     return novo;
   });
 
-  const limpar = () => { try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ } setRascunho(null); setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); setUltimaSalva(null); setMsgShare(''); aoCancelarEdicao(); };
+  const limpar = () => { try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ } setRascunho(null); setOs(vaziaPara(usuario)); setFotos([]); setKit({}); setKitAberto(false); setMsg(''); setUltimaSalva(null); setMsgShare(''); setAvisoLink(''); aoCancelarEdicao(); };
 
   const mudaKit = (descricao: string, delta: number) =>
     setKit(prev => {
@@ -296,6 +324,20 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     }
     const urls = [...os.foto_urls, ...novas];
 
+    // v109: RECHECAGEM pós-upload. O link do fiscal distribui o MESMO número
+    // pro grupo inteiro: dois colegas passam juntos pela guarda lá de cima e
+    // o upload leva minutos — sem índice único no banco, a segunda gravação
+    // entraria DUPLICADA em silêncio. Confere de novo a um passo do insert.
+    if (!os.id && os.numero && !ehGestor) {
+      const corrida = await osService.numeroExiste(Number(os.numero));
+      if (corrida) {
+        if (novas.length) { setOs(o => ({ ...o, foto_urls: urls })); setFotos([]); }
+        setSalvando(false);
+        setMsg(`⛔ Enquanto as fotos subiam, outro colega registrou a O.S. ${os.numero} (${corrida.unidade} · ${corrida.status}). Ache-a na LISTA e complete pelo lápis — NÃO registre de novo.`);
+        return;
+      }
+    }
+
     // GEO (Renan 08/07): carimba onde o celular estava ao salvar — prova
     // de presença na escola. NÃO trava o salvamento: sem sinal ou sem
     // permissão, segue sem coordenada.
@@ -362,6 +404,7 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
     // v86: vale também na EDIÇÃO — quem corrigiu o texto precisa poder mandar
     // a versão certa pro grupo (caso real: E01 do Emiliano, 02/09).
     setSalvaFoiEdicao(!!os.id);
+    setAvisoLink('');
     setUltimaSalva({ ...(salva || dados), foto_urls: urls } as OSCampo);
     try { localStorage.removeItem(chaveRascunho); } catch { /* ok */ }
     setRascunho(null);
@@ -378,6 +421,14 @@ const NovaOS: React.FC<Props> = ({ editando, usuario, aoSalvar, aoCancelarEdicao
 
   return (
     <form onSubmit={salvar} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+      {/* v109: chegada pelo link do fiscal — boas-vindas ou alerta de duplicata */}
+      {avisoLink && (
+        <div className={`rounded-xl px-3 py-2.5 text-xs font-bold ${avisoLink.startsWith('⛔')
+          ? 'bg-red-50 border border-red-200 text-red-700'
+          : 'bg-sky-50 border border-sky-200 text-sky-800'}`}>
+          {avisoLink}
+        </div>
+      )}
       {/* recuperação do rascunho: celular travou? nada se perdeu */}
       {rascunho && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex items-center gap-2 flex-wrap text-xs font-bold text-amber-800">
