@@ -318,7 +318,8 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
   }, []);
   const [gerarOS, setGerarOS] = useState(false);
 
-  // v113: joga o material digitado na cesta e limpa os três campos, deixando
+  // v113: joga o material digitado na cesta e limpa material + quantidade
+  // (a unidade FICA, porque costuma se repetir na mesma retirada), deixando
   // escola / O.S. / retirante como estão — que é o ponto de tudo isto.
   const addNaCesta = () => {
     const d = (saida.descricao || '').trim();
@@ -336,10 +337,19 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     // assim ele pode somar 4 itens e salvar com o 5º ainda no campo, sem
     // precisar lembrar de "adicionar" o último.
     const itensSaida = [...cesta];
-    if ((saida.descricao || '').trim() && saida.quantidade > 0) {
-      itensSaida.push({ descricao: saida.descricao.trim(), quantidade: saida.quantidade, unidade: saida.unidade });
+    const digitado = (saida.descricao || '').trim();
+    if (digitado) {
+      // v113: nada de descartar calado. Se ele escreveu o material e deixou a
+      // quantidade em zero, a tela RECUSA — antes esse item simplesmente não
+      // era gravado e a mensagem de sucesso não dizia que ele ficou de fora.
+      if (!saida.quantidade || saida.quantidade <= 0) {
+        setMsg(`Quantidade de "${digitado}" precisa ser maior que zero — ou apague o material para salvar só a lista.`);
+        return;
+      }
+      itensSaida.push({ descricao: digitado, quantidade: saida.quantidade, unidade: saida.unidade });
     }
     if (itensSaida.length === 0) { setMsg('Escolha pelo menos um material.'); return; }
+    let gerouAgora = false;
     const dest = (saida.destinatario || '').trim();
     // REV 001 do gestor: TODA saída tem retirante — é ele que confirma no login
     if (!dest) { setMsg('Informe QUEM RETIROU — regra do gestor: toda saída tem confirmação no login de quem levou.'); return; }
@@ -383,6 +393,13 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       const r = prefixo ? await osService.salvarEquipe(novaOS, prefixo) : await osService.salvar(novaOS);
       if (!r.ok || !r.os) { setSalvando(false); setMsg('Erro ao gerar a O.S.: ' + (r.erro || '?')); return; }
       osRef = refDaOS(r.os);
+      gerouAgora = true;
+      // v113: a O.S. já EXISTE no banco a partir daqui. Se o insert da saída
+      // falhar logo abaixo e ele tocar em salvar de novo, antes nascia uma
+      // SEGUNDA O.S. emergencial para a mesma retirada. Carimbando o número
+      // no formulário e desligando o gatilho, o retry reaproveita esta.
+      setGerarOS(false);
+      setSaida(p => ({ ...p, os_ref: osRef }));
       setSalvando(false);
     }
 
@@ -426,8 +443,14 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
       delete payload.obs; delete payload.destinatario; delete payload.recebido; delete payload.contrato;
       ({ error } = await supabase.from('saida_material').insert(linhasCom(payload)));
     }
-    setSalvando(false);
-    if (error) { setMsg('Erro: ' + error.message); return; }
+    if (error) { setSalvando(false); setMsg('Erro: ' + error.message); return; }
+    // v113 — ORDEM IMPORTA. Antes o setSalvando(false) vinha AQUI, mas o
+    // trabalho por item (status da O.S. + cadastro + apelido) continua por
+    // mais alguns segundos abaixo. Com o botão reaberto e a cesta ainda
+    // cheia, um segundo toque regravava a RETIRADA INTEIRA. Agora a cesta
+    // esvazia assim que o insert passa (o laço abaixo usa itensSaida, que é
+    // cópia local) e o botão só reabre no fim.
+    setCesta([]);
 
     // SAIU MATERIAL = ESTÁ EXECUTANDO (regra Renan 10/07): O.S. Pendente
     // vinculada à saída muda de status sozinha — retirar material no
@@ -472,9 +495,9 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
     const resumo = itensSaida.length === 1
       ? `${itensSaida[0].quantidade} ${itensSaida[0].unidade} ${itensSaida[0].descricao}`
       : `${itensSaida.length} itens (${itensSaida.map(i => `${i.quantidade} ${i.unidade} ${i.descricao}`).join(' · ')})`;
-    setMsg(`✅ Saída: ${resumo}${osRef ? ' → O.S. ' + osRef : ''}${obsExtra ? ' ⚠️ SEM vínculo (nº anotado na obs)' : ''}${gerarOS && osRef ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}${avisoEscola}${alertaCad}${msgStatus}`);
+    setSalvando(false);
+    setMsg(`✅ Saída: ${resumo}${osRef ? ' → O.S. ' + osRef : ''}${obsExtra ? ' ⚠️ SEM vínculo (nº anotado na obs)' : ''}${gerouAgora ? ' 🚨 (O.S. emergencial GERADA agora)' : ''}${dest ? ` · aguardando ✓ de ${dest}` : ''}${avisoEscola}${alertaCad}${msgStatus}`);
     setGerarOS(false);
-    setCesta([]);
     setSaida(p => ({ ...SAIDA_VAZIA, data: p.data, escola: p.escola, os_ref: osRef, origem: p.origem }));
     carregar();
   };
@@ -1069,9 +1092,11 @@ const AlmoxOS: React.FC<{ listaOS: OSCampo[]; ehGestor?: boolean; usuario?: stri
                       // itens já empilhados para OUTRA escola sem ele perceber —
                       // é a mesma falha dos 48 materiais carimbados na unidade
                       // errada que a auditoria achou. Pergunta antes.
-                      if (cesta.length > 0 && !confirm(
-                        `Você tem ${cesta.length} ${cesta.length === 1 ? 'item' : 'itens'} na lista` +
-                        `${(saida.escola || '').trim() ? ` para ${saida.escola}` : ''}.\n\n` +
+                      // conta também o que está DIGITADO: ele também seria gravado
+                      const pend = cesta.length + ((saida.descricao || '').trim() ? 1 : 0);
+                      if (pend > 0 && !confirm(
+                        `Você tem ${pend} ${pend === 1 ? 'item' : 'itens'} para lançar` +
+                        `${(saida.escola || '').trim() ? ` em ${saida.escola}` : ''}.\n\n` +
                         `OK = esses itens passam para a O.S. ${refDaOS(o)} (${o.unidade})\n` +
                         `Cancelar = volta e salva a retirada atual primeiro`
                       )) return;
